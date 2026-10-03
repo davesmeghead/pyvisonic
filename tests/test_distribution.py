@@ -1,16 +1,16 @@
 """Build the sdist, build its wheel, and exercise the installed release offline."""
 
+from importlib.metadata import version
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
-import tomllib
 import zipfile
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+VERSION = version("pyvisonic")
 
 
 def run(*args, cwd):

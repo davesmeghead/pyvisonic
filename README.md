@@ -96,3 +96,7 @@ These are initial regression tests; they do not verify live panel behaviour or
 all message types. Add anonymised captures and expected decoded state when fixing
 protocol bugs. The receive API is synchronous, so these tests use a local event
 loop without starting background connection tasks.
+
+## Development and releases
+
+See [RELEASING.md](RELEASING.md) for local checks and the public CI release process.

@@ -23,6 +23,8 @@ import logging
 import os
 import sys
 
+__version__ = "4.0.3"
+
 from .py_device import AlGenericDevice
 from .py_enum import (
     AlAlarmType,
@@ -48,7 +50,6 @@ if not __package__:
 
 __author__ = "DaveSmeghead"
 __name__ = "pyvisonic"
-__version__ = "4.0.2"
 __all__ = [
     "AlAlarmType",
     "AlCommandStatus",

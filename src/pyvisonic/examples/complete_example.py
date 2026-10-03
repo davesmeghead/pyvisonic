@@ -27,7 +27,7 @@ from textual.app import App, ComposeResult
 from textual.message import Message
 from textual.widgets import Footer, Input, RichLog, Static
 
-from ..py_visonic import (
+from .. import (
     AlAlarmType,
     AlCommandStatus,
     AlCondition,
