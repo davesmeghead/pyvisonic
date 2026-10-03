@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyvisonic"
+dynamic = ["version"]
+authors = [
+    { name = "DaveSmegHead" },
+]
+description = "An asyncio python interface library to the visonic alarm panel"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = ["Pillow"]
+keywords = ["pyvisonic", "visonic", "home assistant", "alarm"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pip", "build", "setuptools>=77", "twine"]
+examples = ["pyserial-asyncio>=0.6", "textual", "requests", "serialx"]
+
+[project.urls]
+Homepage = "https://github.com/davesmeghead/pyvisonic"
+Issues = "https://github.com/davesmeghead/pyvisonic/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pyvisonic", "pyvisonic.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"pyvisonic.examples" = ["requirements.txt"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyvisonic.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

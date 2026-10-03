@@ -1,0 +1,5 @@
+Pillow
+pyserial-asyncio>=0.6
+textual
+requests
+serialx
