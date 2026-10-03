@@ -34,6 +34,7 @@ include = ["pyvisonic", "pyvisonic.*"]
 namespaces = false
 
 [tool.setuptools.package-data]
+"pyvisonic" = ["py.typed"]
 "pyvisonic.examples" = ["requirements.txt"]
 
 [tool.setuptools.dynamic]

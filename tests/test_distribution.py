@@ -1,6 +1,6 @@
 """Build the sdist, build its wheel, and exercise the installed release offline."""
 
-from importlib.metadata import version
+import ast
 from pathlib import Path
 import subprocess
 import sys
@@ -10,7 +10,15 @@ import zipfile
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = version("pyvisonic")
+VERSION = next(
+    node.value.value
+    for node in ast.parse((ROOT / "src/pyvisonic/__init__.py").read_text()).body
+    if isinstance(node, ast.Assign)
+    and any(
+        isinstance(target, ast.Name) and target.id == "__version__"
+        for target in node.targets
+    )
+)
 
 
 def run(*args, cwd):
@@ -37,6 +45,7 @@ def installed_release(tmp_path_factory):
     run('-m', 'twine', 'check', '--strict', str(sdist), str(wheel), cwd=work)
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
+        assert 'pyvisonic/py.typed' in names
         assert 'pyvisonic/py_visonic.py' in names
         assert 'pyvisonic/examples/example_common.py' in names
         assert 'pyvisonic/examples/requirements.txt' in names
@@ -54,6 +63,7 @@ import importlib, importlib.metadata, pathlib, pkgutil, sys
 sys.path.insert(0, {str(target)!r})
 import pyvisonic
 assert pathlib.Path(pyvisonic.__file__).is_relative_to({str(target)!r})
+assert (pathlib.Path(pyvisonic.__file__).parent / 'py.typed').is_file()
 assert importlib.metadata.version('pyvisonic') == {VERSION!r}
 for module in pkgutil.iter_modules(pyvisonic.__path__):
     if not module.ispkg:
