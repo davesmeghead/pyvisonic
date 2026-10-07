@@ -179,7 +179,7 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
         self.onNewSensorHandler: Callable[[bool, AlSensorDevice], None] | None = None
         self.onNewSwitchHandler: Callable[[bool, AlSwitchDevice], None] | None = None
         self.onNewDeviceHandler: Callable[[bool, AlGenericDevice], None] | None = None
-        self.onProblemHandler: Callable[[Exception | str | None], None] | None = None
+        self.onProblemHandler: Callable[[AlTerminationType], None] | None = None
         self.onPanelLogHandler: Callable[..., None] | None = None
         # Global Variables that define the overall panel status
         self.PanelMode: AlPanelMode = AlPanelMode.UNKNOWN
@@ -260,22 +260,22 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
             self.onPanelChangeHandler(ev, d)
 
     # Set the on_problem callback handlers
-    def on_problem(self, fn: Callable[..., None]) -> None:             # on_problem ( exception or string or None )
+    def on_problem(self, fn: Callable[[AlTerminationType], None]) -> None:             # on_problem ( exception or string or None )
         """On Problem Callback Setter."""
         self.onProblemHandler = fn
 
     # Set the on_new_sensor callback handlers
-    def on_new_sensor(self, fn: Callable[..., None]) -> None:             # on_new_sensor ( device: AlSensorDevice )
+    def on_new_sensor(self, fn: Callable[[bool, AlSensorDevice], None]) -> None:             # on_new_sensor ( device: AlSensorDevice )
         """On New Sensor Callback Setter."""
         self.onNewSensorHandler = fn
 
     # Set the on_new_switch callback handlers
-    def on_new_switch(self, fn: Callable[..., None]) -> None:             # on_new_switch ( sensor: AlSwitchDevice )
+    def on_new_switch(self, fn: Callable[[bool, AlSwitchDevice], None]) -> None:             # on_new_switch ( sensor: AlSwitchDevice )
         """On New Switch Callback Setter."""
         self.onNewSwitchHandler = fn
 
     # Set the on_new_sensor callback handlers
-    def on_new_device(self, fn: Callable[..., None]) -> None:             # on_new_device ( device: AlGenericDevice )
+    def on_new_device(self, fn: Callable[[bool, AlGenericDevice], None]) -> None:             # on_new_device ( device: AlGenericDevice )
         """On New Device Callback Setter."""
         self.onNewDeviceHandler = fn
 
@@ -285,7 +285,7 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
         self.onPanelLogHandler = fn
 
     # Set the onPanelEvent callback handlers
-    def on_panel_change(self, fn: Callable[..., None]) -> None:             # on_panel_change ( datadictionary: dict )
+    def on_panel_change(self, fn: Callable[[AlCondition, dict[str, Any] | None], None]) -> None:             # on_panel_change ( datadictionary: dict )
         """On Panel Change Callback Setter."""
         self.onPanelChangeHandler = fn
 
@@ -303,7 +303,7 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
         # Set mode to Stopped just in case the handler uses it, leave all other variables as they are
         self.PanelMode = AlPanelMode.STOPPED
         if self.onProblemHandler:
-            self.onProblemHandler(termination.name)
+            self.onProblemHandler(termination)
 
     def _is_send_queue_empty(self, priority : MessagePriority | None = None) -> bool:
         """Is the send message queue empty (at the given priority level)."""

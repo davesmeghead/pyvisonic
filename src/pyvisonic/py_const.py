@@ -6,7 +6,7 @@ import os
 
 from . import __version__
 
-LIBRARY_VERSION = __version__
+LIBRARY_VERSION: str = __version__
 
 NOBYPASSSTR = "No Bypass"
 DISABLE_TEXT = "Disable"
@@ -42,12 +42,12 @@ TEXT_AC_FAIL    = "ac_failure"
 #     Setting this to True limits the logging of messages sent to the panel to CMD or NONE
 #                     It also limits logging of received data
 
-OBFUS = os.getenv("HA_DEBUG_NO_OBFUSCATION") != "1"
+OBFUS : bool = os.getenv("HA_DEBUG_NO_OBFUSCATION") != "1"
 #OBFUS = True
 
 # Whether to include B0 35 and B0 42 panel data decode in the log file.  Note that this is also combined with OBFUS.
-B0_35_PANEL_DATA_LOG = True  # True or False
-B0_42_PANEL_DATA_LOG = B0_35_PANEL_DATA_LOG
+B0_35_PANEL_DATA_LOG: bool = True  # True or False
+B0_42_PANEL_DATA_LOG: bool = B0_35_PANEL_DATA_LOG
 
 class DebugLevel(IntEnum):
     """Debug level."""

@@ -27,7 +27,7 @@ from textual.app import App, ComposeResult
 from textual.message import Message
 from textual.widgets import Footer, Input, RichLog, Static
 
-from .. import (
+from .. import (  # noqa: TID252
     AlAlarmType,
     AlCommandStatus,
     AlCondition,
@@ -500,7 +500,7 @@ class VisonicClient(BasicConnection):
             self.process_x10(switch)
 #        self.log.debug(f"onSwitchChange {switch}")
 
-    def on_new_switch(self, create : bool, py_switch: AlSwitchDevice) -> None:
+    def on_new_switch(self, create : bool, py_switch: AlSwitchDevice | None) -> None:
         """Process a new x10."""
         # Check to ensure variables are set correctly
         #self.log.debug("on_new_switch")
@@ -513,14 +513,12 @@ class VisonicClient(BasicConnection):
                 self.process_x10(py_switch)
                 py_switch.add_callback(self.onSwitchChange)
 
-    def on_new_sensor(self, create : bool, py_sensor: AlSensorDevice) -> None:
+    def on_new_sensor(self, create : bool, py_sensor: AlSensorDevice | None) -> None:
         """Process a new sensor."""
         if py_sensor is None:
             self.log.debug("Visonic attempt to add sensor when sensor is undefined")
             return
-        if py_sensor.id is None:
-            self.log.debug("     Sensor ID is None")
-        elif self.process_sensor is not None:
+        if self.process_sensor is not None:
             self.process_sensor(py_sensor)
             py_sensor.add_callback(self.onSensorChange)
 
@@ -650,6 +648,19 @@ class VisonicClient(BasicConnection):
         self.doingReconnect = None
         return False
 
+    def on_panel_event_log_handler(
+        self,
+        total: int,
+        current: int,
+        partition: set[int],
+        dateandtime: datetime,
+        zone: int,
+        event: int
+    ) -> None:
+        """Panel event log handler."""
+        if self.process_log is not None:
+            self.process_log(total, current, partition, dateandtime, zone, event)
+
     async def async_connect(self, force: bool = True) -> bool:
         """Connect to the alarm panel using the pyvisonic library."""
         if self.SystemStarted:
@@ -682,7 +693,7 @@ class VisonicClient(BasicConnection):
                     self.visonic_protocol.on_panel_change(self.onPanelChangeHandler)
                     self.visonic_protocol.on_new_sensor(self.on_new_sensor)
                     self.visonic_protocol.on_new_switch(self.on_new_switch)
-                    self.visonic_protocol.on_panel_event_log(self.process_log)
+                    self.visonic_protocol.on_panel_event_log(self.on_panel_event_log_handler)
                     #self.visonic_protocol.set_log_events(self.language_decoder.getLogEventList())
                     #self.visonic_protocol.on_problem(self.on_panel_problem)
                     #self.visonic_protocol.on_new_device(self.on_new_device)
@@ -841,6 +852,7 @@ class VisonicClient(BasicConnection):
 
 async def controller(client : VisonicClient, console : MyAsyncConsole) -> None:  # noqa: C901
     """Overall controller."""
+    global connection_mode  # noqa: PLW0603
 
     def process_event(event_id : AlCondition, data : dict[str, Any] | None = None) -> None:
         # event means there's been a panel state change
@@ -862,24 +874,19 @@ async def controller(client : VisonicClient, console : MyAsyncConsole) -> None: 
 
     def process_sensor(dev: AlSensorDevice) -> None:
         """Process sensor."""
-        if dev.id is None:
-            console.print("Sensor ID is None")
+        #console.print("process_sensor " + str(dev.id))
+        if dev not in sensors:
+            console.print("Adding Sensor " + str(dev))
+            sensors.append(dev)
+        if dev.triggered:
+            console.print(f"Device {dev.id} Triggered")
         else:
-            #console.print("process_sensor " + str(dev.id))
-            if dev not in sensors:
-                console.print("Adding Sensor " + str(dev))
-                sensors.append(dev)
-            if dev.triggered:
-                console.print(f"Device {dev.id} Triggered")
-            else:
-                console.print(f"Device {dev.id} Settings have been updated, open = {dev.is_open}")
+            console.print(f"Device {dev.id} Settings have been updated, open = {dev.is_open}")
 
     def process_x10(dev: AlSwitchDevice) -> None:
         """Process switch."""
         if dev.enabled:
-            if dev.id is None:
-                console.print("X10 is None")
-            elif dev not in devices:
+            if dev not in devices:
                 console.print("X10 ", str(dev))
                 devices.append(dev)
 
@@ -1005,9 +1012,9 @@ async def controller(client : VisonicClient, console : MyAsyncConsole) -> None: 
                     elif command == 'o':
                         #  output mode
                         if len(ar) > 1:
-                            mode=str(ar[1].strip()).lower()
+                            smode: str = str(ar[1].strip()).lower()
                             #console.print(f"Setting output mode to {mode} :{mode[0]}:")
-                            ConfigureLogger(mode, console)
+                            ConfigureLogger(smode, console)
                         else:
                             console.print("Current output level is " + str(logger_level))
                     elif command == 'q':
@@ -1017,7 +1024,7 @@ async def controller(client : VisonicClient, console : MyAsyncConsole) -> None: 
                         return
                     elif not client.isSystemStarted() and command == 'c':
                         if len(ar) > 1:
-                            mode=str(ar[1].strip()).lower()
+                            connection_mode=str(ar[1].strip()).lower()
                         client.installHandlers(process_event=process_event, process_log=process_log, process_sensor=process_sensor, process_x10=process_x10)
                         sensors = []
                         devices = []

@@ -23,7 +23,7 @@ import logging
 import os
 import sys
 
-__version__ = "4.0.4"
+__version__ = "4.0.5"
 
 from .py_device import AlGenericDevice
 from .py_enum import (

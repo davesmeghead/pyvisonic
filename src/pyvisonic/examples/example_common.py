@@ -8,7 +8,7 @@ from typing import Any
 
 from serialx import create_serial_connection
 
-from ..py_visonic import VisonicProtocol, VisonicProtocolClient  # noqa: TID252
+from .. import VisonicProtocol, VisonicProtocolClient  # noqa: TID252
 
 # This class joins the Protocol data stream to the visonic protocol handler.
 #    transport needs to have 2 functions:   write(bytearray)  and  close()
@@ -28,7 +28,7 @@ class BasicConnection:
     ) -> tuple[Any, Any] | None:
         """Create a Visonic TCP connection."""
 
-        def disconnection_callback():
+        def disconnection_callback() -> None:
             if connection_status_callback is not None:
                 connection_status_callback()
 
@@ -60,7 +60,7 @@ class BasicConnection:
     ) -> tuple[asyncio.Transport, Any] | None:
         """Create Visonic manager class, returns rs232 transport coroutine."""
 
-        def disconnection_callback():
+        def disconnection_callback() -> None:
             if connection_status_callback is not None:
                 connection_status_callback()
 

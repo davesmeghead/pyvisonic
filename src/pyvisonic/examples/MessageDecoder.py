@@ -5,7 +5,7 @@ import logging
 import sys
 
 #print(sys.path[0])
-from pyvisonic.py_visonic import VisonicProtocol
+from .. import VisonicProtocol  # noqa: TID252
 
 d = "0d 60 03 24 1a ff 08 ff 15 0e 00 00 00 00 00 00 00 39 33 11 0f 08 1a 14 07 01 00 83 00 00 17 43 3a 0a"
 

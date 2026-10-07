@@ -493,7 +493,7 @@ class VisonicProtocolClient(asyncio.Protocol):
     ) -> None:
         """Visonic Protocol client."""
         #log.debug(f"[ClientVisonicProtocol] Init")
-        self._transport : asyncio.Transport | None = None
+        self._transport : asyncio.Transport
         self._transport_valid: bool = False
         self.vp: VisonicProtocol = vp
         self._disconnection_callback: Callable[..., None] | None = disconnection_callback
@@ -580,7 +580,7 @@ class VisonicProtocolClient(asyncio.Protocol):
             self.vp.resume()
             self.paused = False
         else:
-            log.warning("[ClientVisonicProtocol] cannot resume,   paused=%s   transport=%s",self.paused, self._transport)
+            log.warning("[ClientVisonicProtocol] cannot resume,   paused=%s   transport=%s",self.paused, self.transport)
 
     # This is needed so we can create the class instance before giving it to the protocol handlers
     def __call__(self) -> VisonicProtocolClient:

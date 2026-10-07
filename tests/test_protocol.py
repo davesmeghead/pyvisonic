@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from pyvisonic import AlTerminationType
 from pyvisonic.py_enum import Receive
 from pyvisonic.py_visonic import VisonicProtocol
 
@@ -75,3 +76,14 @@ def test_shutdown_ignores_further_data(protocol):
     protocol.data_received(bytearray.fromhex('0d 06 f9 0a'))
     receiver.assert_not_called()
     protocol.shutdown()  # Repeated shutdown must also be safe.
+
+
+def test_problem_callback_receives_termination_enum(protocol: VisonicProtocol) -> None:
+    """Problem callbacks receive the typed reason rather than its name."""
+    callback = Mock()
+    protocol.on_problem(callback)
+    termination = next(iter(AlTerminationType))
+
+    protocol._report_problem(termination)
+
+    callback.assert_called_once_with(termination)

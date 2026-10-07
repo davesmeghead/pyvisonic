@@ -12,7 +12,7 @@ import logging
 import sys
 import time
 
-from ..py_visonic import VisonicProtocol, VisonicProtocolClient  # noqa: TID252
+from .. import VisonicProtocol, VisonicProtocolClient  # noqa: TID252
 from .example_common import BasicConnection
 
 _LOGGER = logging.getLogger(__name__)
