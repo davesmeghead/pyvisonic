@@ -1,14 +1,14 @@
 """Process the messages from the panel."""
 
-# ruff: noqa: G004, C901, BLE001
+# ruff: noqa: BLE001
 
 import asyncio
-from collections.abc import Callable
-from datetime import datetime
-from enum import Enum, auto
 import io
 import logging
 import traceback
+from collections.abc import Callable
+from datetime import datetime
+from enum import Enum, auto
 from typing import NamedTuple
 
 from PIL import Image
@@ -45,7 +45,7 @@ from .py_sensor_types import VisonicFunctions
 from .py_types import AlPanelEventData
 from .py_types_receiving import Chunky
 from .py_types_sending import pmSendMsgB0, pmSendMsgB0_reverseLookup
-from .py_utils import b2i, convert_bytearray, get_local_time, hexify, toString
+from .py_utils import b2i, convert_bytearray, get_local_time, hexify, to_string
 from .py_visonic_message_b0_chunk import MessageHandlingB0Data
 
 AUDIO_IMAGE_ID = 0   # the panel closes a capture with its audio clip, always as image 0
@@ -54,7 +54,7 @@ IMAGE_BAD = 1        # Used in F4-07 messages to the panel
 
 def _is_wav(buffer: bytes | bytearray) -> bool:
     """Does this buffer look like a RIFF/WAVE clip rather than a JPEG frame."""
-    return (buffer is not None and len(buffer) > 12
+    return (len(buffer) > 12
             and bytes(buffer[:4]) == b"RIFF" and bytes(buffer[8:12]) == b"WAVE")
 
 
@@ -138,56 +138,56 @@ class MessageHandling(MessageHandlingB0Data):
             Receive.TIMEOUT           : DecodeMessage(                 True , self._handle_msgtype_06, 2, -2, False, None ),  # Timeout
             Receive.UNKNOWN_07        : DecodeMessage(                 True , self._handle_msgtype_07, 2, -2, False, None ),  # No idea what this means
             Receive.ACCESS_DENIED     : DecodeMessage(                 True , self._handle_msgtype_08, 2, -2, False, None ),  # Access Denied
-            Receive.LOOPBACK_TEST     : DecodeMessage(                 True , self._handle_msgtype_0B, 2, -2, False, None ),  # # LOOPBACK TEST, STOP (0x0B) IS THE FIRST COMMAND SENT TO THE PANEL WHEN THIS INTEGRATION STARTS
-            Receive.EXIT_DOWNLOAD     : DecodeMessage(                 True , self._handle_msgtype_0F, 2, -2, False, None ),  # Exit
+            Receive.LOOPBACK_TEST     : DecodeMessage(                 True , self._handle_msgtype_0b, 2, -2, False, None ),  # # LOOPBACK TEST, STOP (0x0B) IS THE FIRST COMMAND SENT TO THE PANEL WHEN THIS INTEGRATION STARTS
+            Receive.EXIT_DOWNLOAD     : DecodeMessage(                 True , self._handle_msgtype_0f, 2, -2, False, None ),  # Exit
             Receive.UNKNOWN_1F        : DecodeMessage(                False , None                   , 2, -2, False, "WARNING: Message 0x1F is not decoded" ),
             Receive.UNKNOWN_22        : DecodeMessage(                False , None                   , 2, -2, False, "WARNING: Message 0x22 is not decoded, are you using an old Powermax Panel as this is not supported?" ),
             Receive.DOWNLOAD_RETRY    : DecodeMessage(                 True , self._handle_msgtype_25, 2, -2, False, None ),  # Download retry
             Receive.DOWNLOAD_SETTINGS : DecodeMessage( ProcessFlag.DOWNLOAD , self._handle_msgtype_33, 2, -2, False, "Received 33 Message, we are in the wrong mode (so I'm ignoring the message)"),  # Settings send after a MSGV_START
-            Receive.PANEL_INFO        : DecodeMessage(                 True , self._handle_msgtype_3C, 2, -2, False, None ),  # Message when start the download
-            Receive.DOWNLOAD_BLOCK    : DecodeMessage( ProcessFlag.DOWNLOAD , self._handle_msgtype_3F, 2, -2, False, "Received 3F Message, we are in the wrong mode (so I'm ignoring the message)"),  # Download information
-            Receive.EVENT_LOG         : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_A0, 2, -2, False, None ),  # Event log
-            Receive.ZONE_NAMES        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_A3, 2, -2,  True, None ),  # Zone Names
-            Receive.STATUS_UPDATE     : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_A5, 2, -2,  True, None ),  # Zone Information/Update
-            Receive.ZONE_TYPES        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_A6, 2, -2,  True, None ),  # Zone Types
-            Receive.PANEL_STATUS      : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_A7, 2, -2,  True, None ),  # Panel Information/Update
-            Receive.POWERLINK         : DecodeMessage(       ProcessFlag.AB , self._handle_msgtype_AB, 2, -2,  True, "Received AB Message, we are in the wrong mode (so I'm ignoring the message)"),
-            Receive.SWITCH_NAMES      : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_AC, 2, -2,  True, None ),  # Switch Names
-            Receive.IMAGE_MGMT        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_AD, 2, -2,  True, None ),  # No idea what this means, it might ...  send it just before transferring F4 video data ?????
-            Receive.POWERMASTER       : DecodeMessage(       ProcessFlag.B0 , self._handle_msgtype_B0, 2, -2,  True, None ),
-            Receive.IMAGE_DATA        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_F4, 2, -3, False, None ),  # F4 Message from a Powermaster, decode image and audio data. Footer and 2 checksum bytes.
-            Receive.REDIRECT          : DecodeMessage(                 True , self._handle_msgtype_C0, 2, -2, False, None ),
-            Receive.PROXY_COMMAND     : DecodeMessage(                 True , self._handle_msgtype_E1, 2, -2, False, None ),
-            Receive.PROXY             : DecodeMessage(                 True , self._handle_msgtype_E0, 2, -2, False, None )
+            Receive.PANEL_INFO        : DecodeMessage(                 True , self._handle_msgtype_3c, 2, -2, False, None ),  # Message when start the download
+            Receive.DOWNLOAD_BLOCK    : DecodeMessage( ProcessFlag.DOWNLOAD , self._handle_msgtype_3f, 2, -2, False, "Received 3F Message, we are in the wrong mode (so I'm ignoring the message)"),  # Download information
+            Receive.EVENT_LOG         : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_a0, 2, -2, False, None ),  # Event log
+            Receive.ZONE_NAMES        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_a3, 2, -2,  True, None ),  # Zone Names
+            Receive.STATUS_UPDATE     : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_a5, 2, -2,  True, None ),  # Zone Information/Update
+            Receive.ZONE_TYPES        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_a6, 2, -2,  True, None ),  # Zone Types
+            Receive.PANEL_STATUS      : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_a7, 2, -2,  True, None ),  # Panel Information/Update
+            Receive.POWERLINK         : DecodeMessage(       ProcessFlag.AB , self._handle_msgtype_ab, 2, -2,  True, "Received AB Message, we are in the wrong mode (so I'm ignoring the message)"),
+            Receive.SWITCH_NAMES      : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_ac, 2, -2,  True, None ),  # Switch Names
+            Receive.IMAGE_MGMT        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_ad, 2, -2,  True, None ),  # No idea what this means, it might ...  send it just before transferring F4 video data ?????
+            Receive.POWERMASTER       : DecodeMessage(       ProcessFlag.B0 , self._handle_msgtype_b0, 2, -2,  True, None ),
+            Receive.IMAGE_DATA        : DecodeMessage(   ProcessFlag.NORMAL , self._handle_msgtype_f4, 2, -3, False, None ),  # F4 Message from a Powermaster, decode image and audio data. Footer and 2 checksum bytes.
+            Receive.REDIRECT          : DecodeMessage(                 True , self._handle_msgtype_c0, 2, -2, False, None ),
+            Receive.PROXY_COMMAND     : DecodeMessage(                 True , self._handle_msgtype_e1, 2, -2, False, None ),
+            Receive.PROXY             : DecodeMessage(                 True , self._handle_msgtype_e0, 2, -2, False, None )
         }
 
     # This is abstract so implement the function
-    def _processReceivedPacket(self, packet : bytearray, processAB : bool, processNormalData : bool, processB0 : bool, processDownload : bool) -> bool:
+    def _process_received_packet(self, packet : bytearray, process_ab : bool, process_normal_data : bool, process_b0 : bool, process_download : bool) -> bool:
 
         if len(packet) < 4:
             # There must at least be a header, command, checksum and footer i.e. 4 bytes
             #    It is rare that this happens so checked after the creation of decode_message_handlers
-            log.warning(f"[_processReceivedPacket] Received invalid packet structure, not processing it {toString(packet)}")
+            log.warning(f"[_processReceivedPacket] Received invalid packet structure, not processing it {to_string(packet)}")
             return False
 
         try:
             msg_type : Receive = Receive(packet[1])
         except (OSError, KeyError, ValueError):
-            log.info(f"[_processReceivedPacket] Unknown/Unhandled packet type from Visonic Panel, packet {toString(packet)}")
+            log.info(f"[_processReceivedPacket] Unknown/Unhandled packet type from Visonic Panel, packet {to_string(packet)}")
             return False
 
         try:
-            log.debug(f"[_processReceivedPacket] {msg_type.name} {processAB=} {processB0=} {processNormalData=} {processDownload=}")
+            log.debug(f"[_processReceivedPacket] {msg_type.name} {process_ab=} {process_b0=} {process_normal_data=} {process_download=}")
 
             # msg_type is a valid Receive type but also check to make sure it's in decode_message_handlers as a key
             dm = self.decode_message_handlers.get(msg_type)
             if dm is not None:
                 # build the flags dict
                 flags = {
-                    ProcessFlag.AB: processAB,
-                    ProcessFlag.NORMAL: processNormalData,
-                    ProcessFlag.B0: processB0,
-                    ProcessFlag.DOWNLOAD: processDownload,
+                    ProcessFlag.AB: process_ab,
+                    ProcessFlag.NORMAL: process_normal_data,
+                    ProcessFlag.B0: process_b0,
+                    ProcessFlag.DOWNLOAD: process_download,
                 }
                 # if dm.flag is bool then use it, else look up the value in the flags dict
                 condition = dm.flag if isinstance(dm.flag, bool) else flags.get(dm.flag, False)
@@ -195,77 +195,77 @@ class MessageHandling(MessageHandlingB0Data):
                 if dm.func is not None and condition:
                     # There is a valid function and the condition is True so we process the packet
                     pc = dm.func(packet[dm.payload_start : dm.payload_end])    # Use the return value if the function returns
-                    return pc if pc is not None and isinstance(pc,bool) else dm.pushchange
+                    return pc if pc is not None else dm.pushchange
                 if dm.message is not None:
-                    log.debug(f"[_processReceivedPacket]     {dm.message}, data bytes are {toString(packet)}")
+                    log.debug(f"[_processReceivedPacket]     {dm.message}, data bytes are {to_string(packet)}")
                 else:
-                    log.debug(f"[_processReceivedPacket]     Received data not processed, data bytes are {toString(packet)}")
+                    log.debug(f"[_processReceivedPacket]     Received data not processed, data bytes are {to_string(packet)}")
             else:
-                log.debug(f"[_processReceivedPacket] {msg_type} not in list of valid messages, packet {toString(packet)}")
+                log.debug(f"[_processReceivedPacket] {msg_type} not in list of valid messages, packet {to_string(packet)}")
         except (OSError, KeyError, ValueError):
-            log.warning(f"[_processReceivedPacket] Visonic Panel Message Decoder General Exception, packet {toString(packet)}")
+            log.warning(f"[_processReceivedPacket] Visonic Panel Message Decoder General Exception, packet {to_string(packet)}")
         return False
 
     def _handle_msgtype_02(self, data: bytearray) -> None:  # ACK
         """Handle Acknowledges from the panel."""
         # Normal acknowledges have msgtype 0x02 but no data, when in powerlink the panel also sends data byte 0x43
         #    I have not found this on the internet, this is my hypothesis
-        #log.debug(f"[handle_msgtype02] Ack Received  data = {toString(data)}")
+        #log.debug(f"[handle_msgtype02] Ack Received  data = {to_string(data)}")
 
-        process_ab = not self.pmDownloadMode and self.PanelMode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK]
+        process_ab = not self.pm_download_mode and self.panel_mode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK]
         self._reset_watchdog_timeout()
         if process_ab and len(data) > 0 and data[0] == Packet.POWERLINK_TERMINAL:
-            self.receivedPowerlinkAcknowledge = True
-            if self.allowAckToTriggerRestore:
-                log.debug(f"[handle_msgtype02]        Received a powerlink acknowledge, I am in {self.PanelMode.name} mode and sending Message RESTORE") #  and not self.PowerLinkBridgeConnected
+            self.received_powerlink_acknowledge = True
+            if self.allow_ack_to_trigger_restore:
+                log.debug(f"[handle_msgtype02]        Received a powerlink acknowledge, I am in {self.panel_mode.name} mode and sending Message RESTORE") #  and not self.power_link_bridge_connected
                 self._trigger_restore_status()     # Clear message buffers and send a Restore (if in Powerlink or standard plus) or Status (not in Powerlink) to the Panel
-                self.allowAckToTriggerRestore = False
+                self.allow_ack_to_trigger_restore = False
 
     def _handle_msgtype_06(self, _data : bytearray) -> None:
         """MsgType=06 - Time out. Timeout message from the PM, most likely we are/were in download mode."""
         log.debug("[handle_msgtype06] Timeout Received")
-        self.TimeoutReceived = True
+        self.timeout_received = True
 
     def _handle_msgtype_07(self, data : bytearray) -> None:
         """MsgType=07 - No idea what this means."""
-        log.debug(f"[handle_msgtype07] No idea what this message means, data = {toString(data)}")
-        self._check_unknown("    and its different", "handle_msgtype07", toString(data))
+        log.debug(f"[handle_msgtype07] No idea what this message means, data = {to_string(data)}")
+        self._check_unknown("    and its different", "handle_msgtype07", to_string(data))
         # Assume that we need to send an ack
 
     def _handle_msgtype_08(self, data : bytearray) -> None:
         """MsgType=08 - Access Denied."""
-        log.debug(f"[handle_msgtype08] Access Denied  len {len(data)} data {toString(data)}")
-        self.AccessDeniedReceived = True
-        self.AccessDeniedMessage = self.pmLastSentMessage
+        log.debug(f"[handle_msgtype08] Access Denied  len {len(data)} data {to_string(data)}")
+        self.access_denied_received = True
+        self.access_denied_message = self.pm_last_sent_message
         if len(data) > 0 and data[0] == Packet.POWERLINK_TERMINAL:
             log.debug("[handle_msgtype08]        Access Denied  from a Powerlink 0x43 command")
 
-    def _handle_msgtype_0B(self, _data : bytearray) -> None:  # LOOPBACK TEST SUCCESS, STOP COMMAND (0x0B) IS THE FIRST COMMAND SENT TO THE PANEL WHEN THIS INTEGRATION STARTS
+    def _handle_msgtype_0b(self, _data : bytearray) -> None:  # LOOPBACK TEST SUCCESS, STOP COMMAND (0x0B) IS THE FIRST COMMAND SENT TO THE PANEL WHEN THIS INTEGRATION STARTS
         """Handle LOOPBACK."""
-        #log.debug(f"[handle_msgtype0B] Loopback test assumed {toString(data)}")
-        self.loopbackTest = True
-        self.loopbackCounter += 1
-        log.warning(f"[handle_msgtype0B] LOOPBACK TEST SUCCESS, Counter is {self.loopbackCounter}")
+        #log.debug(f"[handle_msgtype0B] Loopback test assumed {to_string(data)}")
+        self.loopback_test = True
+        self.loopback_counter += 1
+        log.warning(f"[handle_msgtype0B] LOOPBACK TEST SUCCESS, Counter is {self.loopback_counter}")
 
-    def _handle_msgtype_0F(self, data : bytearray) -> None:  # EXIT
+    def _handle_msgtype_0f(self, data : bytearray) -> None:  # EXIT
         """Handle EXIT from the panel."""
-        log.debug(f"[handle_msgtype0F] Exit    data is {toString(data)}")
+        log.debug(f"[handle_msgtype0F] Exit    data is {to_string(data)}")
         # This is sent by the panel during download to tell us to stop the download
-        self.ExitReceived = True
+        self.exit_received = True
 
     def _handle_msgtype_25(self, data : bytearray) -> None:  # Download retry
         """MsgType=25 - Download retry. Unit is not ready to enter download mode."""
         # Format: <MsgType> <?> <?> <delay in sec>
         int_delay = data[2]
-        log.debug(f"[handle_msgtype25] Download Retry, have to wait {int_delay} seconds     data is {toString(data)}")
-        self.DownloadRetryReceived = True
+        log.debug(f"[handle_msgtype25] Download Retry, have to wait {int_delay} seconds     data is {to_string(data)}")
+        self.download_retry_received = True
 
     def _handle_msgtype_33(self, data : bytearray) -> None:
         """MsgType=33 - Settings. Message sent after a MSG_START. We will store the information in an internal array/collection."""
 
         if len(data) != 10:
             log.debug(f"[handle_msgtype33] ERROR: MSGTYPE=0x33 Expected len=14, Received={len(data)}")
-            log.debug(f"[handle_msgtype33]                            {toString(data)}")
+            log.debug(f"[handle_msgtype33]                            {to_string(data)}")
             return
 
         # Data Format is: <index> <page> <8 data bytes>
@@ -273,31 +273,27 @@ class MessageHandling(MessageHandlingB0Data):
         index = data[0]
         page = data[1]
 
-        # log.debug(f"[handle_msgtype33] Getting Data {toString(data)}   page {hexify(iPage)}   index {hexify(iIndex)}")
+        # log.debug(f"[handle_msgtype33] Getting Data {to_string(data)}   page {hexify(iPage)}   index {hexify(iIndex)}")
         # Write to memory map structure, but remove the first 2 bytes from the data
-        self.epromManager.saveEPROMSettings(page, index, data[2:])
+        self.eprom_manager.save_eprom_settings(page, index, data[2:])
 
-    def _handle_msgtype_3C(self, data : bytearray) -> None:  # Panel Info Messsage when start the download
-        """The panel information is in 4 & 5. 5=PanelType e.g. PowerMax, PowerMaster.  4=Sub model type of the panel - just informational, not used."""
-        if not self.pmGotPanelDetails:
-            self.ModelType = data[4]
-            if not self._set_data_from_panel_type(data[5], self.pmForceDownloadByEPROM):
+    def _handle_msgtype_3c(self, data : bytearray) -> None:  # Panel Info Messsage when start the download
+        """The panel information is in 4 & 5. 5=panel_type e.g. PowerMax, PowerMaster.  4=Sub model type of the panel - just informational, not used."""
+        if not self.pm_got_panel_details:
+            self.model_type = data[4]
+            if not self._set_data_from_panel_type(data[5], self.pm_force_download_by_eprom):
                 log.debug(f"[handle_msgtype3C] Panel Type {data[5]} Unknown")
 
-            log.debug(f"[handle_msgtype3C] PanelType={self.PanelType} : {self.PanelModel} , Model={self.ModelType}   Powermaster {self.PowerMaster}")
+            log.debug(f"[handle_msgtype3C] PanelType={self.panel_type} : {self.panel_model} , Model={self.model_type}   Powermaster {self.power_master}")
 
-            self.pmGotPanelDetails = True
+            self.pm_got_panel_details = True
         else:
             log.debug("[handle_msgtype3C] Not Processed as already got Panel Details")
 
-    def _handle_msgtype_3F(self, data : bytearray) -> None:
+    def _handle_msgtype_3f(self, data : bytearray) -> None:
         """MsgType=3F - Download information. Multiple 3F can follow each other, maximum block size seems to be 0xB0 bytes."""
 
-        def format_download_list(dl: list[bytearray]) -> None:
-            for lh in dl:
-                log.warning(f"[3F Message handler]    {toString(lh)}")
-
-        if self.PanelMode != AlPanelMode.DOWNLOAD:
+        if self.panel_mode != AlPanelMode.DOWNLOAD:
             log.debug("[handle_msgtype3F] Received data but in Standard Mode so ignoring data")
             return
 
@@ -308,56 +304,56 @@ class MessageHandling(MessageHandlingB0Data):
         length = data[2]
 
         # PowerMaster 10 (Model 7) and PowerMaster 33 (Model 10) has a very specific problem with downloading the Panel EPROM and doesn't respond with the correct number of bytes
-        #if self.PanelType is not None and self.ModelType is not None and ((self.PanelType == 7 and self.ModelType == 68) or (self.PanelType == 10 and self.ModelType == 71)):
+        #if self.panel_type is not None and self.model_type is not None and ((self.panel_type == 7 and self.model_type == 68) or (self.panel_type == 10 and self.model_type == 71)):
         #    if iLength != len(data) - 3:
-        #        log.debug(f"[handle_msgtype3F] Not checking data length as it could be incorrect.  We requested {iLength} and received {len(data) - 3}")
-        #        log.debug(f"[handle_msgtype3F]                            {toString(data)}")
+        #        log.debug(f"[handle_msgtype_3f] Not checking data length as it could be incorrect.  We requested {iLength} and received {len(data) - 3}")
+        #        log.debug(f"[handle_msgtype_3f]                            {to_string(data)}")
         #    # Write to memory map structure, but remove the first 3 bytes (index/page/length) from the data
-        #    self.epromManager.saveEPROMSettings(iPage, iIndex, data[3:])
+        #    self.eprom_manager.save_eprom_settings(iPage, iIndex, data[3:])
 
-        blocklen = self.epromManager.findLength(self.is_power_master(), page, index)
+        blocklen = self.eprom_manager.find_length(self.is_power_master(), page, index)
 
         #log.warning(f"[3F Message handler] got data for  {iPage=}  {iIndex=}   {iLength=}")
-        #format_download_list(self.myDownloadList)
+        #format_download_list(self.my_download_list)
 
         if length == len(data) - 3 and blocklen is not None and blocklen == length:
             # Write to memory map structure, but remove the first 3 bytes (index/page/length) from the data
             #log.warning("[3F Message handler]     Success")
-            self.epromManager.saveEPROMSettings(page, index, data[3:])
+            self.eprom_manager.save_eprom_settings(page, index, data[3:])
             # Are we finished yet?
-            if len(self.myDownloadList) > 0:
-                self.pmDownloadInProgress = True
-                self.add_message_to_send_queue(Send.DL, options=[ (1, self.myDownloadList.pop(0)) ])  # Read the next block of EPROM data
+            if len(self.my_download_list) > 0:
+                self.pm_download_in_progress = True
+                self.add_message_to_send_queue(Send.DL, options=[ (1, self.my_download_list.pop(0)) ])  # Read the next block of EPROM data
             else:
-                self.myDownloadList = self.epromManager.populatEPROMDownload(self.is_power_master())
-                if len(self.myDownloadList) == 0:
+                self.my_download_list = self.eprom_manager.populate_eprom_download(self.is_power_master())
+                if len(self.my_download_list) == 0:
                     # This is the message to tell us that the panel has finished download mode, so we too should stop download mode
                     log.debug("[handle_msgtype3F] Download Complete")
-                    self.pmDownloadInProgress = False
-                    self.pmDownloadMode = False
-                    self.pmDownloadComplete = True
+                    self.pm_download_in_progress = False
+                    self.pm_download_mode = False
+                    self.pm_download_complete = True
                 else:
                     log.debug("[handle_msgtype3F] Download seemed to be complete but not got all EPROM data yet")
-                    self.pmDownloadInProgress = True
-                    self.add_message_to_send_queue(Send.DL, options=[ (1, self.myDownloadList.pop(0)) ])  # Read the next block of EPROM data
-        elif self.pmDownloadRetryCount <= DOWNLOAD_PDU_RETRY_COUNT:
+                    self.pm_download_in_progress = True
+                    self.add_message_to_send_queue(Send.DL, options=[ (1, self.my_download_list.pop(0)) ])  # Read the next block of EPROM data
+        elif self.pm_download_retry_count <= DOWNLOAD_PDU_RETRY_COUNT:
             log.warning(f"[handle_msgtype3F] Invalid EPROM data block length (received: {len(data)-3}, Expected: {length},  blocklen: {blocklen}). Adding page {page} Index {index} to the end of the list to redownload")
-            log.warning(f"[handle_msgtype3F]                            {toString(data)}")
-            #tmp = self.epromManager.findLength(self.is_power_master, iPage, iIndex) # used to debug only
+            log.warning(f"[handle_msgtype3F]                            {to_string(data)}")
+            #tmp = self.eprom_manager.find_length(self.is_power_master, iPage, iIndex) # used to debug only
             # Add it back on to the end to re-download it
             if blocklen is not None:
-                self.myDownloadList.append(bytearray([index, page, blocklen, 0]))
+                self.my_download_list.append(bytearray([index, page, blocklen, 0]))
             # Increment counter
-            self.pmDownloadRetryCount += 1
+            self.pm_download_retry_count += 1
         else:
             log.warning(f"[handle_msgtype3F] Invalid EPROM data block length (received: {len(data)-3}, Expected: {length},  blocklen: {blocklen}). Giving up on page {page} Index {index}")
-            self.myDownloadList = []
+            self.my_download_list = []
             log.debug("[handle_msgtype3F] Download InComplete")
-            self.pmDownloadInProgress = False
-            self.pmDownloadMode = False
-            self.pmDownloadComplete = False
+            self.pm_download_in_progress = False
+            self.pm_download_mode = False
+            self.pm_download_complete = False
 
-    def _handle_msgtype_A0(self, data : bytearray) -> None:
+    def _handle_msgtype_a0(self, data : bytearray) -> None:
         """MsgType=A0 - Event Log."""
         # From my Powermaster30  [handle_MsgTypeA0] Packet = 5f 02 01 64 58 5c 58 d3 41 51
 
@@ -377,33 +373,35 @@ class MessageHandling(MessageHandlingB0Data):
         # Check for the first entry, it only contains the number of events
         if event_number == 0x01:
             log.debug("[handle_msgtypeA0]    Eventlog received")
-            self.eventCount = data[0] - 1  ## the number of messages (including this one) minus 1
-        elif self.onPanelLogHandler is not None:
+            self.event_count = data[0] - 1  ## the number of messages (including this one) minus 1
+        elif self.on_panel_log_handler is not None:
             # There's no point in doing all of this if there's no handler to send it to!
 
             if self.is_power_master(): # PowerMaster models
                 # extract the time as "epoch time" and convert to normal time
                 hs = b2i(data[3:7])
-                pmtime = datetime.fromtimestamp(hs)
+                # Preserve the panel's recorded local wall-clock time without a timezone.
+                pmtime = datetime.fromtimestamp(hs)  # noqa: DTZ006, RUF100
                 #log.debug(f"[handle_msgtypeA0]   Powermaster time {hs} as hex {hex(hs)} from epoch is {pmtime}")
                 event_zone = data[8]
             else:
                 # Assume that seconds is 0 for PowerMax panels
                 #        datetime(year, month, day, hour, minute, second, microsecond)
-                pmtime = datetime(int(data[7]) + 2000, data[6], data[5], data[4], data[3], 0, 0)
+                # Preserve the panel's recorded local wall-clock time without a timezone.
+                pmtime = datetime(int(data[7]) + 2000, data[6], data[5], data[4], data[3], 0, 0)  # noqa: DTZ001, RUF100
                 event_zone = int(data[8] & 0x7F) # PowerMax limits the event zones, 0 to 127
 
             # Send the event log in to HA
-            #     Do not use timezone times as it was the log created on that day at that time
+            # Preserve the panel's recorded local wall-clock time without a timezone.
             #log.debug(f"[handle_msgtypeA0]                       Log Entry {pl}")
-            self.onPanelLogHandler(total = self.eventCount, current = event_number - 1, partition = data[2], dateandtime = pmtime, zone = event_zone, event = data[9])
+            self.on_panel_log_handler(total = self.event_count, current = event_number - 1, partition = data[2], dateandtime = pmtime, zone = event_zone, event = data[9])
 
-    def _handle_msgtype_A3(self, data : bytearray) -> None:
+    def _handle_msgtype_a3(self, data : bytearray) -> None:
         """MsgType=A3 - Zone Names."""
-        log.debug(f"[handle_MsgTypeA3] Packet = {toString(data)}")
+        log.debug(f"[handle_MsgTypeA3] Packet = {to_string(data)}")
         msg_cnt = int(data[0])
         offset = 8 * (int(data[1]) - 1)
-        log.debug(f"            Message Count is {msg_cnt}   offset={offset}     self.PanelMode = {self.PanelMode}")
+        log.debug(f"            Message Count is {msg_cnt}   offset={offset}     self.PanelMode = {self.panel_mode}")
 
         zn = self.panel_settings[PanelSetting.ZoneNames].data
         if isinstance(zn, bytearray):
@@ -412,26 +410,26 @@ class MessageHandling(MessageHandlingB0Data):
             for i in range(8):
                 # Save the Zone Name
                 zn[offset+i] = data[2+i] & 0x1F
-                if self.PanelMode not in (AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED) and (offset+i) in self.SensorList:
+                if self.panel_mode not in (AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED) and (offset+i) in self.sensor_list:
                     self._update_sensor(sensor_identifier = offset+i)
 
-    def _handle_msgtype_A5(self, data : bytearray) -> None:  # Status Message
+    def _handle_msgtype_a5(self, data : bytearray) -> None:  # Status Message
         """MsgType=A5 - Zone Data Update."""
 
         # msgTot = data[0]
         command_type = data[1]
 
-        #log.debug(f"[handle_msgtypeA5] Parsing A5 packet {toString(data)}")
+        #log.debug(f"[handle_msgtypeA5] Parsing A5 packet {to_string(data)}")
 
         match command_type:
-            case 1 if len(self.SensorList) > 0:
+            case 1 if len(self.sensor_list) > 0:
                 log.debug("[handle_msgtypeA5] Zone Alarm Status: Ztrip and ZTamper")
                 self._do_sensor_update(data[2:6],  VisonicFunctions.DO_ZTRIP,   "[handle_msgtypeA5]      Zone Trip Alarm 32-01")
                 self._do_sensor_update(data[6:10], VisonicFunctions.DO_ZTAMPER, "[handle_msgtypeA5]      Zone Tamper Alarm 32-01")
 
-            case 2 if len(self.SensorList) > 0:
+            case 2 if len(self.sensor_list) > 0:
                 # if in standard mode then use this A5 status message to reset the watchdog timer
-                if self.PanelMode != AlPanelMode.POWERLINK:
+                if self.panel_mode != AlPanelMode.POWERLINK:
                     log.debug("[handle_msgtypeA5] Got A5 02 message, resetting watchdog")
                     self._reset_watchdog_timeout()
 
@@ -439,7 +437,7 @@ class MessageHandling(MessageHandlingB0Data):
                 self._do_sensor_update(data[2:6],  VisonicFunctions.DO_STATUS,  "[handle_msgtypeA5]      Open Door/Window Status Zones 32-01")
                 self._do_sensor_update(data[6:10], VisonicFunctions.DO_BATTERY, "[handle_msgtypeA5]      Battery Low Zones 32-01")
 
-            case 3 if len(self.SensorList) > 0:
+            case 3 if len(self.sensor_list) > 0:
                 # This status is different from the status in the 0x02 part above i.e they are different values.
                 #    This one is wrong (I had a door open and this status had 0, the one above had 1)
                 #       According to domotica forum, this represents "active" but what does that actually mean?
@@ -456,7 +454,7 @@ class MessageHandling(MessageHandlingB0Data):
             case 4:
                 # 00 04 01 15 00 00 02 02 00 00
                 # Assume that every zone event causes the need to push a change to the sensors etc
-                if self.PanelMode != AlPanelMode.POWERLINK:
+                if self.panel_mode != AlPanelMode.POWERLINK:
                     #log.debug("[handle_msgtypeA5] Got A5 04 message, resetting watchdog")
                     self._reset_watchdog_timeout()
 
@@ -483,16 +481,16 @@ class MessageHandling(MessageHandlingB0Data):
 
                     # Process sys_status and sys_flags only if there are no partitions
                     #     The panel sends A5 messages for all partitions but we don't know the partition number. So how do we know what to decode?
-                    old_panel_state = self.PartitionState[0].PanelStateData
-                    s = self.PartitionState[0].UpdatePartition(sysStatus=sys_status, sysFlags=sys_flags, PanelMode=self.PanelMode)   # does not set partition in return value
+                    old_panel_state = self.partition_state[0].panel_state_data
+                    s = self.partition_state[0].update_partition(sys_status=sys_status, sys_flags=sys_flags, panel_mode=self.panel_mode)   # does not set partition in return value
                     if s is not None:
                         self.add_panel_event_data(s)
-                    new_panel_state = self.PartitionState[0].PanelStateData
+                    new_panel_state = self.partition_state[0].panel_state_data
                     if new_panel_state == AlPanelStatus.DISARMED and new_panel_state != old_panel_state:
                         # Panel state is Disarmed and it has just changed, get the bypass state of the sensors as the panel may have changed them
                         self.add_message_to_send_queue(Send.BYPASSTAT)
 
-                if sys_flags & 0x20 != 0:  # Zone Event
+                if sys_flags & 0x20 != 0:  # Zone Event  # noqa: SIM102
                     if event_type > 0 and event_device != 0xff: # I think that 0xFF refers to the panel itself as a zone. Currently not processed
                         self._process_zone_event(event_device=event_device, event_type=event_type)
 
@@ -523,17 +521,17 @@ class MessageHandling(MessageHandlingB0Data):
                 vala = b2i(data[2:6])
                 valb = b2i(data[6:10])
                 if vala != 0 or valb != 0:
-                    log.info(f"[handle_msgtypeA5]      Unknown A5 Message: {toString(data)}")
+                    log.info(f"[handle_msgtypeA5]      Unknown A5 Message: {to_string(data)}")
                     # [handle_msgtypeA5]      Unknown A5 Message: 10 05 00 00 00 00 00 00 43 21 43        # 4321 is the 1st account number
-                self._check_unknown("[handle_msgtypeA5]              This A5 Message is different to last time", f"handle_msgtypeA5_{command_type}", toString(data))
+                self._check_unknown("[handle_msgtypeA5]              This A5 Message is different to last time", f"handle_msgtypeA5_{command_type}", to_string(data))
         self.send_panel_update(AlCondition.PUSH_CHANGE)  # push through a panel update to the HA Frontend
 
-    def _handle_msgtype_A6(self, data : bytearray) -> None:
+    def _handle_msgtype_a6(self, data : bytearray) -> None:
         """MsgType=A6 - Zone Types."""
-        log.debug(f"[handle_MsgTypeA6] Packet = {toString(data)}")
+        log.debug(f"[handle_MsgTypeA6] Packet = {to_string(data)}")
         msg_cnt = int(data[0])
         offset = 8 * (int(data[1]) - 1)
-        log.debug(f"            Message Count is {msg_cnt}   offset={offset}     self.PanelMode={self.PanelMode}")
+        log.debug(f"            Message Count is {msg_cnt}   offset={offset}     self.PanelMode={self.panel_mode}")
         zt = self.panel_settings[PanelSetting.ZoneTypes].data
         if isinstance(zt, bytearray):
             if len(zt) < offset+8:
@@ -542,45 +540,41 @@ class MessageHandling(MessageHandlingB0Data):
                 # Save the Zone Type
                 zt[offset+i] = ((int(data[2+i])) - 0x1E) & 0x0F
                 log.debug(f"                        Zone type for sensor {offset+i+1} is {hexify((int(data[2+i])) - 0x1E)} : {pmMapZoneType[zt[offset+i]]}")
-                if self.PanelMode not in (AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED) and (offset+i) in self.SensorList:
+                if self.panel_mode not in (AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED) and (offset+i) in self.sensor_list:
                     self._update_sensor(sensor_identifier = offset+i)
 
-    def _handle_msgtype_A7(self, data : bytearray) -> None:
+    def _handle_msgtype_a7(self, data : bytearray) -> None:
         """MsgType=A7 - Panel Status Change."""
-        #log.debug(f"[handle_msgtypeA7] Panel Status Change {toString(data)}")
+        #log.debug(f"[handle_msgtypeA7] Panel Status Change {to_string(data)}")
         # 01 00 27 51 02 ff 00 02 00 00
         # ff 5d 00 2d 00 00 11 0c 00 00
 
-        def getType(event: int) -> EventType:
+        def get_type(event: int) -> EventType:
             return EventType(event) if event in EventType else EventType.NOT_DEFINED
 
-        def getTypeStr(event: int) -> str:
-            return self.logEventList[event] if 0 <= event <= 151 and len(self.logEventList[event]) > 0 else "Unknown"
-
-        def displayEvent(m: str, zone: int, event: int) -> None:
-            et : EventType = getType(event)
-            event_str = getTypeStr(event)
+        def display_event(m: str, zone: int, event: int) -> None:
+            et : EventType = get_type(event)
             if self.is_power_master():
-                log.debug(f"[handle_msgtypeA7]           {m}  {zone}/{event}   {et.name}     {event_str=}")
+                log.debug(f"[handle_msgtypeA7]           {m}  {zone}/{event}   {et.name}     {event=}")
             else:
-                log.debug(f"[handle_msgtypeA7]           {m}  {zone}/{event}   {et.name}     {event_str=}")
+                log.debug(f"[handle_msgtypeA7]           {m}  {zone}/{event}   {et.name}     {event=}")
 
-        def processEvent(partition: int, zone: int, event: int) -> EventType:
+        def process_event(partition: int, zone: int, event: int) -> EventType:
 
-            et : EventType = getType(event)
+            et : EventType = get_type(event)
             self.add_panel_event_data(AlPanelEventData(name=zone, action=int(event))) # assume partition -1 means a panel event not tied to a partition
 
-            part: PartitionStateClass = self.PartitionState[partition]
-            if zone-1 in self.SensorList:                                                 # only used if it decides that siren is sounding, then that is the trigger sensor
-                part.UpdatePanelState(et, self.SensorList[zone-1])
+            part: PartitionStateClass = self.partition_state[partition]
+            if zone-1 in self.sensor_list:                                                 # only used if it decides that siren is sounding, then that is the trigger sensor
+                part.update_panel_state(et, self.sensor_list[zone-1])
             else:
-                part.UpdatePanelState(et)
+                part.update_panel_state(et)
 
-            if et == EventType.FORCE_ARM or (self.pmForceArmSetInPanel and et == EventType.DISARM): # Force Arm OR (ForceArm has been set and Disarm)
-                self.pmForceArmSetInPanel = et == EventType.FORCE_ARM                                # When the panel uses ForceArm then sensors may be automatically armed and bypassed by the panel
+            if et == EventType.FORCE_ARM or (self.pm_force_arm_set_in_panel and et == EventType.DISARM): # Force Arm OR (ForceArm has been set and Disarm)
+                self.pm_force_arm_set_in_panel = et == EventType.FORCE_ARM                                # When the panel uses ForceArm then sensors may be automatically armed and bypassed by the panel
                 log.debug("[handle_msgtypeA7]              Panel has been Armed using Force Arm, sensors may have been bypassed by the panel, asking panel for an update on bypassed sensors")
                 if self.is_power_master():
-                    self.B0_Wanted.add(B0SubType.ZONE_BYPASS)
+                    self.b0_wanted.add(B0SubType.ZONE_BYPASS)
                 else:
                     self.add_message_to_send_queue(Send.BYPASSTAT)
 
@@ -588,21 +582,21 @@ class MessageHandling(MessageHandlingB0Data):
 
         def device_battery_check(device_reference: int, event_type: EventType, index_name: IndexName, good: EventType, bad: EventType) -> None:
             if index_name in powermaster_devices and index_name in powermax_devices:
-                if self.PowerMaster:
+                if self.power_master:
                     start = int(powermaster_devices.get(index_name, 100000))
                 else:
                     start = int(powermax_devices.get(index_name, 100000))
-                finish: int = start + self.PanelCapabilities.get(index_name, -100000)
+                finish: int = start + self.panel_capabilities.get(index_name, -100000)
                 if finish > 0 and device_reference >= start and device_reference <= finish:
                     index = device_reference - start
                     device_id = AlGenericDevice.make_key(index_name, index)
-                    if device_id in self.DeviceList:
+                    if device_id in self.device_list:
                         if event_type == bad:
-                            self.DeviceList[device_id].low_battery = True
-                            self.DeviceList[device_id].notify()
+                            self.device_list[device_id].low_battery = True
+                            self.device_list[device_id].notify()
                         if event_type == good:
-                            self.DeviceList[device_id].low_battery = False
-                            self.DeviceList[device_id].notify()
+                            self.device_list[device_id].low_battery = False
+                            self.device_list[device_id].notify()
 
         msg_cnt = int(data[0])
         # If message count is FF then it looks like the first message is valid so decode it (this is experimental)
@@ -610,7 +604,7 @@ class MessageHandling(MessageHandlingB0Data):
         #    msg_cnt = 1
 
         if msg_cnt == 255 and (_piu := self.get_partitions_in_use()) is not None:
-            log.debug(f"[handle_msgtypeA7]      A7 FF message (partitions), cannot rely on anything in this message for a powermaster with partitions, data={toString(data)}")
+            log.debug(f"[handle_msgtypeA7]      A7 FF message (partitions), cannot rely on anything in this message for a powermaster with partitions, data={to_string(data)}")
             ## I have tried for many hours to make sense of this message data for my PowerMaster 30 panel with 2 partitons set up for testing.
             ## It looked like I had it with the code below and then it gave me ARMED_AWAY and DISARMED messages when they were not commanded, not even within the same hour.
             ## It looks like other messages that come in slow time e.g. low battery, maybe system reset, may be able to be processed.  Need to think about this more!
@@ -636,27 +630,26 @@ class MessageHandling(MessageHandlingB0Data):
             #valid = int(data[5]) == 0xFF      # data[5] is 0xFF so process the data, it looks like the rest of the data is valid to process
             #event_reason = int(data[6])
 
-            #log.debug(f"[handle_msgtypeA7]      A7 FF message (partitions) contains data={toString(data)}")
+            #log.debug(f"[handle_msgtypeA7]      A7 FF message (partitions) contains data={to_string(data)}")
             #self._check_unknown("[handle_msgtypeA7]              A7 Message unknown byte is different to last time", f"handle_msgtypeA7_{msg_cnt}", data[1])
             #if valid:
-            #    et = getType(event_reason)
-            #    es = getTypeStr(event_reason)
-            #    displayEvent("Assuming that it is", event_device, event_type)
-            #    log.debug(f"[handle_msgtypeA7]                 May be linked with byte 6: {et.name}        String={es}")
+            #    et = get_type(event_reason)
+            #    display_event("Assuming that it is", event_device, event_type)
+            #    log.debug(f"[handle_msgtypeA7]                 May be linked with byte 6: {et.name}        String={event_reason}")
             #    log.debug(f"[handle_msgtypeA7]                 Partition: {partition}")
             #    log.debug(f"[handle_msgtypeA7]                 Counter: {data[1]}")
             #    if partition == 0: # assume all partitions
             #        for p in list(piu):
-            #            processEvent(p-1, event_device, event_type)
+            #            process_event(p-1, event_device, event_type)
             #    else:
-            #        #processEvent(partition-1, event_device, event_type)
+            #        #process_event(partition-1, event_device, event_type)
             #        partitionCnt = self._get_panel_capability(IndexName.PARTITION)
             #        if partition is not None and partitionCnt > 1:
             #            for j in range(0, partitionCnt):  # max partitions of all panels
             #                if (partition & (1 << j)) != 0:
-            #                    processEvent(j, event_device, event_type)
+            #                    process_event(j, event_device, event_type)
             #else:
-            #    displayEvent("Not sure what this represents, is it historical, or perhaps 'live'", event_device, event_type)
+            #    display_event("Not sure what this represents, is it historical, or perhaps 'live'", event_device, event_type)
 
         elif msg_cnt == 255: # no partitions
             # Not from any of my panels:
@@ -668,30 +661,29 @@ class MessageHandling(MessageHandlingB0Data):
             #  10:43:26.033 [handle_msgtypeA7]      A7 FF message (no partitions) contains,   unknown byte is 0x51  : data=ff 51 61 51 01 00 11 06 00 00 43
             #  10:45:04.772 [handle_msgtypeA7]      A7 FF message (no partitions) contains,   unknown byte is 0x53  : data=ff 53 00 61 00 ff 00 0c 00 00 43
 
-            log.debug(f"[handle_msgtypeA7]      A7 FF message (no partitions) contains,   unknown byte is {hex(int(data[1]))}  : data={toString(data)}")
+            log.debug(f"[handle_msgtypeA7]      A7 FF message (no partitions) contains,   unknown byte is {hex(int(data[1]))}  : data={to_string(data)}")
             self._check_unknown("[handle_msgtypeA7]              A7 Message unknown byte is different to last time", f"handle_msgtypeA7_{msg_cnt}", data[1])
 
             # The first entry always looks valid, so for now, process it
             event_device = int(data[2])
             event_type = int(data[3])                     # Looks like an event_type but the timing of when it arrives is all wrong
 
-            processEvent(0, event_device, event_type)        # Assume all panel state goes through partition 1
+            process_event(0, event_device, event_type)        # Assume all panel state goes through partition 1
 
             partition = int(data[4])
             event_reason = int(data[6])
-            et = getType(event_reason)
-            es = getTypeStr(event_reason)
-            log.debug(f"[handle_msgtypeA7]                 May be linked with byte 6: {et.name}        String={es}")
+            et = get_type(event_reason)
+            log.debug(f"[handle_msgtypeA7]                 May be linked with byte 6: {et.name}        {event_reason=}")
             log.debug(f"[handle_msgtypeA7]                 Partition may be: {partition}")
             log.debug(f"[handle_msgtypeA7]                 Counter: {data[1]}")
 
             #for i in range(1,4):
             #    event_device = int(data[2 + (2 * i)])
             #    event_type = int(data[3 + (2 * i)])
-            #    displayEvent(f"Entry {i} Could be", event_device, event_type)
+            #    display_event(f"Entry {i} Could be", event_device, event_type)
 
         elif msg_cnt > 4:
-            log.warning(f"[handle_msgtypeA7]      A7 message contains too many messages to process : {msg_cnt}   data={toString(data)}")
+            log.warning(f"[handle_msgtypeA7]      A7 message contains too many messages to process : {msg_cnt}   data={to_string(data)}")
 
         elif self.get_partitions_in_use() is None:   # message count 0 to 4 and we have no partitions so process message data
             # 0d a7 01 00 1f 52 01 ff 00 01 00 00 43 a0 0a
@@ -699,28 +691,28 @@ class MessageHandling(MessageHandlingB0Data):
             #             03 00 2f 55 2f 1b 00 1c
             self._check_unknown("[handle_msgtypeA7]              A7 Message, count is different to last time", "handle_msgtypeA7_msgCnt", msg_cnt)
             self._check_unknown("[handle_msgtypeA7]              A7 Message unknown byte is different to last time", "handle_msgtypeA7_norm", data[1])
-            log.debug(f"[handle_msgtypeA7]      A7 message (no partitions) contains {msg_cnt} messages,   unknown byte is {hex(int(data[1]))}    data={toString(data)}")
+            log.debug(f"[handle_msgtypeA7]      A7 message (no partitions) contains {msg_cnt} messages,   unknown byte is {hex(int(data[1]))}    data={to_string(data)}")
             for i in range(msg_cnt):
                 device_reference = int(data[2 + (2 * i)])
                 event = int(data[3 + (2 * i)])
-                displayEvent("Event", device_reference, event)
-                event_type = processEvent(0, device_reference, event)        # Assume all panel state goes through partition 0
+                display_event("Event", device_reference, event)
+                event_type = process_event(0, device_reference, event)        # Assume all panel state goes through partition 0
                 device_battery_check(device_reference, event_type, IndexName.KEYFOB, EventType.KEYFOB_LOW_BATTERY_RESTORE, EventType.KEYFOB_LOW_BATTERY)
                 device_battery_check(device_reference, event_type, IndexName.KEYPAD_ONE_WAY, EventType.KEYPAD_LOW_BATTERY_RESTORE, EventType.KEYPAD_LOW_BATTERY)
                 device_battery_check(device_reference, event_type, IndexName.KEYPAD_TWO_WAY, EventType.KEYPAD_LOW_BATTERY_RESTORE, EventType.KEYPAD_LOW_BATTERY)
 
         else:
-            log.warning(f"[handle_msgtypeA7]      DATA NOT PROCESSED AND NEVER SEEN THIS BEFORE. Partitions in use = {self.get_partitions_in_use()} and received a msg_cnt in range 0 to 4, data={toString(data)}")
+            log.warning(f"[handle_msgtypeA7]      DATA NOT PROCESSED AND NEVER SEEN THIS BEFORE. Partitions in use = {self.get_partitions_in_use()} and received a msg_cnt in range 0 to 4, data={to_string(data)}")
 
-    def _handle_msgtype_AB(self, data : bytearray) -> bool:  # PowerLink Message
+    def _handle_msgtype_ab(self, data : bytearray) -> bool:  # PowerLink Message
         """MsgType=AB - Panel Powerlink Messages."""
-        log.debug(f"[handle_msgtypeAB]  data {toString(data)}")
+        log.debug(f"[handle_msgtypeAB]  data {to_string(data)}")
 
         # Restart the timer
         self._reset_watchdog_timeout()
 
         sub_type = data[0]
-        if sub_type == 1 and self.PanelMode in [AlPanelMode.POWERLINK, AlPanelMode.STANDARD_PLUS]:
+        if sub_type == 1 and self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.STANDARD_PLUS]:
             # Panel Time
             log.debug("[handle_msgtypeAB] ***************************** Got Panel Time ****************************")
 
@@ -729,10 +721,10 @@ class MessageHandling(MessageHandlingB0Data):
             self._set_time_in_panel(pt)
             self._check_unknown("[handle_msgtypeAB]              AB Message 1 unknown byte is different to last time", f"handle_msgtypeAB_{sub_type}", data[1])
 
-        elif sub_type == 3 and self.PanelMode in [AlPanelMode.POWERLINK, AlPanelMode.STANDARD_PLUS]:  # keepalive message
+        elif sub_type == 3 and self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.STANDARD_PLUS]:  # keepalive message
             # Example 0D AB 03 00 1E 00 31 2E 31 35 00 00 43 2A 0A
-            #               03 00 1e 00 33 33 31 34 00 00 43        From a Powermax+     PanelType=1, Model=33
-            self._check_unknown("[handle_msgtypeAB]              AB Message 3 message is different to last time", f"handle_msgtypeAB_{sub_type}", toString(data))
+            #               03 00 1e 00 33 33 31 34 00 00 43        From a Powermax+     panel_type=1, Model=33
+            self._check_unknown("[handle_msgtypeAB]              AB Message 3 message is different to last time", f"handle_msgtypeAB_{sub_type}", to_string(data))
 
             log.debug("[handle_msgtypeAB] ***************************** Got PowerLink Keep-Alive ****************************")
             # It is possible to receive this between enrolling (when the panel accepts the enrol successfully) and the EPROM download
@@ -740,26 +732,26 @@ class MessageHandling(MessageHandlingB0Data):
 
             self._reset_powerlink_counter() # reset when received keep-alive from the panel
 
-            if self.PanelMode in [AlPanelMode.POWERLINK, AlPanelMode.STANDARD_PLUS]:
+            if self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.STANDARD_PLUS]:
                 self._reset_keep_alive_messages()
                 # A panel connected via the bridge should not be sending AB keep alive messages, but process it just in case!
-                self.add_message_to_send_queue(Send.ALIVE) # and not self.PowerLinkBridgeConnected
+                self.add_message_to_send_queue(Send.ALIVE) # and not self.power_link_bridge_connected
                 #self.add_message_to_send_queue (Send.ALIVE)       # The Powerlink module sends this when it gets an i'm alive from the panel.
 
-            if self.PanelMode == AlPanelMode.STANDARD_PLUS:
+            if self.panel_mode == AlPanelMode.STANDARD_PLUS:
                 log.debug("[handle_msgtypeAB]         Got alive message while Powerlink mode pending, going to full powerlink and calling Restore")
-                self.PanelMode = AlPanelMode.POWERLINK  # it is truly in powerlink now we are receiving powerlink alive messages from the panel
+                self.panel_mode = AlPanelMode.POWERLINK  # it is truly in powerlink now we are receiving powerlink alive messages from the panel
                 self._trigger_restore_status()        # Clear message buffers and send a Restore (if in Powerlink or standard plus) or Status (not in Powerlink) to the Panel
-                #self._dumpAllDevicesToLogFile()
+                #self._dump_all_devices_to_log_file()
 
         elif sub_type == 3:  # keepalive message
             log.debug("[handle_msgtypeAB] ***************************** Got PowerLink Keep-Alive ****************************")
             log.debug("[handle_msgtypeAB] ********************* Panel Mode not Powerlink / Standard Plus **********************")
-            self.UnexpectedPanelKeepAlive = True
-            self._check_unknown("[handle_msgtypeAB]              AB Message 3 message is different to last time", f"handle_msgtypeAB_{sub_type}", toString(data))
+            self.unexpected_panel_keep_alive = True
+            self._check_unknown("[handle_msgtypeAB]              AB Message 3 message is different to last time", f"handle_msgtypeAB_{sub_type}", to_string(data))
 
-        elif sub_type == 5 and self.PanelMode == AlPanelMode.POWERLINK:  # -- phone message
-            self._check_unknown("[handle_msgtypeAB]              AB Message 5 message is different to last time", f"handle_msgtypeAB_{sub_type}", toString(data))
+        elif sub_type == 5 and self.panel_mode == AlPanelMode.POWERLINK:  # -- phone message
+            self._check_unknown("[handle_msgtypeAB]              AB Message 5 message is different to last time", f"handle_msgtypeAB_{sub_type}", to_string(data))
             action = data[2]
             if action == 1:
                 log.debug("[handle_msgtypeAB] PowerLink Phone: Calling User")
@@ -774,35 +766,35 @@ class MessageHandling(MessageHandlingB0Data):
             else:
                 log.debug(f"[handle_msgtypeAB] PowerLink Phone: Unknown Action {hex(data[1]).upper()}")
 
-        elif sub_type == 10 and data[2] == 0 and self.PanelMode == AlPanelMode.POWERLINK:
+        elif sub_type == 10 and data[2] == 0 and self.panel_mode == AlPanelMode.POWERLINK:
             log.debug(f"[handle_msgtypeAB] PowerLink telling us what the code {hex(data[3]).upper()} {hex(data[4]).upper()} is for downloads, currently not used as I'm not certain of this, and never seen it")
-            self._check_unknown("[handle_msgtypeAB]              AB Message 5 message is different to last time", f"handle_msgtypeAB_{sub_type}_A", toString(data))
+            self._check_unknown("[handle_msgtypeAB]              AB Message 5 message is different to last time", f"handle_msgtypeAB_{sub_type}_A", to_string(data))
 
         elif sub_type == 10 and data[2] == 1:
-            self._check_unknown("[handle_msgtypeAB]              AB Message 5 message is different to last time", f"handle_msgtypeAB_{sub_type}_B", toString(data))
-            if self.PanelMode == AlPanelMode.POWERLINK:
+            self._check_unknown("[handle_msgtypeAB]              AB Message 5 message is different to last time", f"handle_msgtypeAB_{sub_type}_B", to_string(data))
+            if self.panel_mode == AlPanelMode.POWERLINK:
                 log.debug("[handle_msgtypeAB] ************************** PowerLink, Panel wants to auto-enrol but not acted on (already in powerlink) **************************")
-            elif not self.ForceStandardMode:
-                self.PanelWantsToEnrol = True
+            elif not self.force_standard_mode:
+                self.panel_wants_to_enrol = True
                 log.debug("[handle_msgtypeAB] ************************** PowerLink, Panel wants to auto-enrol **************************")
 
         return True
 
-    def _handle_msgtype_AC(self, data : bytearray) -> None:  # PowerLink Message
+    def _handle_msgtype_ac(self, data : bytearray) -> None:  # PowerLink Message
         """MsgType=AC - ???"""
-        log.debug(f"[handle_msgtypeAC]  data {toString(data)}")
-        self._check_unknown("[handle_msgtypeAC]              AC Message is different to last time", "handle_msgtypeAC", toString(data))
+        log.debug(f"[handle_msgtypeAC]  data {to_string(data)}")
+        self._check_unknown("[handle_msgtypeAC]              AC Message is different to last time", "handle_msgtypeAC", to_string(data))
 
-    def _handle_msgtype_AD(self, data : bytearray) -> None:  # PowerLink Message
+    def _handle_msgtype_ad(self, data : bytearray) -> None:  # PowerLink Message
         """MsgType=AD - Panel Powerlink Messages."""
-        log.debug(f"[handle_msgtypeAD]  data {toString(data)}")
+        log.debug(f"[handle_msgtypeAD]  data {to_string(data)}")
         #if data[2] == 0x00: # the request was accepted by the panel
-        #    if self.PanelMode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
+        #    if self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
         #        log.debug(f"[handle_msgtypeAD]      adding Image FB to send list")
         #        self.add_message_to_send_queue(Send.IMAGE_FB)
 
     # Only Powermasters send this message
-    def _handle_msgtype_B0(self, data : bytearray) -> None:  # PowerMaster Message
+    def _handle_msgtype_b0(self, data : bytearray) -> None:  # PowerMaster Message
         """MsgType=B0 - Panel PowerMaster Message."""
         # Only Powermasters send this message
         # Format: <Type> <SubType> <Length of Data and Counter> <Data> <Counter> <0x43>
@@ -815,7 +807,7 @@ class MessageHandling(MessageHandlingB0Data):
             current = 3
             sequence: int | None = None
             overall_length = data[2]
-            retval = []
+            retval: list[Chunky] = []
             mv = memoryview(data)
 
             while current < data_len - 3 and (data[current] == 0xFF or msg_type == 2):
@@ -850,7 +842,7 @@ class MessageHandling(MessageHandlingB0Data):
                         f"Message not fully processed for {msg_type}/{sub_type}  "
                         f"{overall_length - (current-2)} bytes not processed     "
                         f"control byte = {ctrl}    "
-                        f"data is {toString(data[current:])} "
+                        f"data is {to_string(data[current:])} "
                         f"********************************************************")
             return []
 
@@ -879,14 +871,14 @@ class MessageHandling(MessageHandlingB0Data):
             # Do not process this B0 message as it seems to be incorrect
             return
 
-        if sub_type in self.B0_Waiting:
-            self.B0_Waiting.remove(sub_type)
+        if sub_type in self.b0_waiting:
+            self.b0_waiting.remove(sub_type)
 
-        pm = "" if self.PanelModel is None or self.PanelModel == "Unknown" else self.PanelModel + " "
+        pm = "" if self.panel_model == "Unknown" else self.panel_model + " "
         if OBFUS:
             log.debug(f"[handle_msgtypeB0] Received {pm}message {hexify(msg_type):>02}/{hexify(sub_type):>02} (len = {msg_length})    data = <OBFUSCATED>")
         else:
-            log.debug(f"[handle_msgtypeB0] Received {pm}message {hexify(msg_type):>02}/{hexify(sub_type):>02} (len = {msg_length})    data = {toString(data)}")
+            log.debug(f"[handle_msgtypeB0] Received {pm}message {hexify(msg_type):>02}/{hexify(sub_type):>02} (len = {msg_length})    data = {to_string(data)}")
 
         msg_info = pmSendMsgB0_reverseLookup.get(sub_type)
 
@@ -894,25 +886,25 @@ class MessageHandling(MessageHandlingB0Data):
 
         if msg_info is None:
             # Message unknown
-            log.debug(f"[handle_msgtypeB0]             Message {notknown} {msg_type=} {sub_type=} not known about, chunky={isitchunky(data[:-2])}.   data = {toString(data)}")
+            log.debug(f"[handle_msgtypeB0]             Message {notknown} {msg_type=} {sub_type=} not known about, chunky={isitchunky(data[:-2])}.   data = {to_string(data)}")
 
         elif msg_info.chunky:
             # Process the messages that we know about and we believe are chunked
             chunks = chunkme(data[:-2]) # exclude b0 counter and Packet.POWERLINK_TERMINAL at the end
             if len(chunks) == 0:
-                log.debug(f"[handle_msgtypeB0] ******************************************************** Message not chunky (we thought it was) and not processed further ************************************************* data = {toString(data)}")
+                log.debug(f"[handle_msgtypeB0] ******************************************************** Message not chunky (we thought it was) and not processed further ************************************************* data = {to_string(data)}")
             else:
                 for chunk in chunks:
-                    log.debug(f"[handle_msgtypeB0]       {toString(data[:2])}     Decode Chunk: {chunk}")
+                    log.debug(f"[handle_msgtypeB0]       {to_string(data[:2])}     Decode Chunk: {chunk}")
                     # Check the PanelSettings to see if there's one that refers to this message chunk
                     for key, value in pmPanelSettingCodes.items():
-                        if value.PMasterB0Mess is not None and value.PMasterB0Mess in pmSendMsgB0 and pmSendMsgB0[value.PMasterB0Mess].data == sub_type and value.PMasterB0Index == chunk.index:
+                        if value.p_master_b0_mess is not None and value.p_master_b0_mess in pmSendMsgB0 and pmSendMsgB0[value.p_master_b0_mess].data == sub_type and value.p_master_b0_index == chunk.index:
                             self._update_panel_setting(key = key, length = chunk.length, datasize = chunk.datasize, data = chunk.data, display = True, msg = f"{sub_type=}")
                             break
                     self.process_chunk(chunk)
 
         elif sub_type == pmSendMsgB0[B0SubType.INVALID_COMMAND].data: # msg_info.data == "INVALID_COMMAND":
-            log.debug(f"[handle_msgtypeB0]             The Panel Indicates a B0 INVALID_COMMAND sent to the panel:   data={toString(data)}")
+            log.debug(f"[handle_msgtypeB0]             The Panel Indicates a B0 INVALID_COMMAND sent to the panel:   data={to_string(data)}")
             if msg_length % 2 == 0: # msg_length is an even number, the response is in pairs
                 for i in range(0, msg_length, 2):
                     command = data[3+i]
@@ -920,16 +912,16 @@ class MessageHandling(MessageHandlingB0Data):
                     log.debug(f"[handle_msgtypeB0]                     The Panel Indicates {hexify(command):0>2} {hexify(message):0>2}")
                     if command == 0x0D:                             # I think this is "retry later" instruction from the panel (and if it isn't then we can still ask for the message again)
                         if message in pmSendMsgB0_reverseLookup:    # Make sure that were asking for a message that we know about
-                            self.B0_Wanted.add(message)
+                            self.b0_wanted.add(message)
                         else:
                             log.debug(f"[handle_msgtypeB0]                            Unknown Message type for 'retry later' {hexify(message):0>2} so not asking for it")
                     elif command in {2, 4}:
-                        self.beeZeroInvalidCommand: int | None = command
+                        self.bee_zero_invalid_command: int | None = command
 
         elif sub_type == pmSendMsgB0[B0SubType.PANEL_STATE_2].data and msg_length == 15: #  I've only seen a message length of 15 with all 3 partitions populated
             # Panel State (without zone data and not chunky)
             # 03 0f 0f 07 08 0f 00 00 00 43 03 00 87 00 87 00 07 24 43
-            log.debug(f"[handle_msgtypeB0]             Panel State short (15) has been provided data={toString(data)}")
+            log.debug(f"[handle_msgtypeB0]             Panel State short (15) has been provided data={to_string(data)}")
             # Check to make sure its not chunky
             #isitchunky(data[:-2])
             # process the data
@@ -937,32 +929,32 @@ class MessageHandling(MessageHandlingB0Data):
                 for i in range(data[10]):                      # data[10] has the total supported partitions and not just the ones in use
                     offset = i * 2
                     # Repeat 2 bytes (11 to 12) for more than 1 partition.  Message length is 15 so we do not need to check the length.
-                    self._updatePartitionStatus(i, data[offset + 11], data[offset + 12], 0, 0)
+                    self._update_partition_status(i, data[offset + 11], data[offset + 12], 0, 0)
             else:
-                log.debug(f"[handle_msgtypeB0]             The message is chunky so I don't know how to process it:  data={toString(data)}")
+                log.debug(f"[handle_msgtypeB0]             The message is chunky so I don't know how to process it:  data={to_string(data)}")
 
         elif sub_type == pmSendMsgB0[B0SubType.PANEL_STATE_2].data and msg_length == 11: #  This is a test, I've only seen a message length of 15 with all 3 partitions populated
             # Panel State (without zone data and not chunky)
-            log.debug(f"[handle_msgtypeB0]             Panel State short (11) has been provided data={toString(data)}")
+            log.debug(f"[handle_msgtypeB0]             Panel State short (11) has been provided data={to_string(data)}")
             # Check to make sure its not chunky
             if not isitchunky(data[:-2]):                      # Check to make sure its not chunky
                 # process the data, assume 1 partition
-                self._updatePartitionStatus(0, data[11], data[12], 0, 0)
+                self._update_partition_status(0, data[11], data[12], 0, 0)
             else:
-                log.debug(f"[handle_msgtypeB0]             The message is chunky so I don't know how to process it:  data={toString(data)}")
+                log.debug(f"[handle_msgtypeB0]             The message is chunky so I don't know how to process it:  data={to_string(data)}")
 
         else:
             # Process the messages that we know about and are not chunked
-            log.debug(f"[handle_msgtypeB0]             Message {msg_info.data} known about but not chunky and not currently processed data={toString(data)}")
-            if msg_info.data in self.B0_temp and self.B0_temp[msg_info.data] != data:
+            log.debug(f"[handle_msgtypeB0]             Message {msg_info.data} known about but not chunky and not currently processed data={to_string(data)}")
+            if msg_info.data in self.b0_temp and self.b0_temp[msg_info.data] != data:
                 log.debug("[handle_msgtypeB0]                 and its different to last time")
-            self.B0_temp[msg_info.data] = data
+            self.b0_temp[msg_info.data] = data
         #log.debug(f"[handle_msgtypeB0] ******************************************************** Leaving *************************************************")
 
-    def _handle_msgtype_C0(self, _data : bytearray) -> None:  # Redirected Powerlink Data
+    def _handle_msgtype_c0(self, _data : bytearray) -> None:  # Redirected Powerlink Data
         log.debug("[handle_msgtypeC0] ******************************************************** Should not be here *************************************************")
 
-    def _handle_msgtype_E0(self, data : bytearray) -> None:  # Visonic Proxy
+    def _handle_msgtype_e0(self, data : bytearray) -> None:  # Visonic Proxy
         # 0d e0 <no of alarm clients connected> <no of visonic clients connected> <no of monitor clients connected> <if in proxy mode> <if in stealth mode> 43 <checksum> 0a
         log.warning('[handle_msgtypeE0]  Visonic Proxy Status   '
                   f'Alarm: {"Connected" if data[0] == 1 else "Disconnected"}    '
@@ -971,19 +963,19 @@ class MessageHandling(MessageHandlingB0Data):
                   f'Proxy: {"Yes" if data[3] == 1 else "No"}    '
                   f'Stealth: {"Yes" if data[4] == 1 else "No"}    '
                   f'Download: {"Yes" if data[5] == 1 else "No"}' )
-        if self.ForceStandardMode:
+        if self.force_standard_mode:
             log.debug("[handle_msgtypeE0]  Visonic Proxy Not Being Used as Currently forced in Standard Mode")
         else:
-            self.PowerLinkBridgeConnected = True
-            self.PowerLinkBridgeAlarm = data[0] != 0
-            self.PowerLinkBridgeProxy = data[3] != 0
-            self.PowerLinkBridgeStealth = data[4] != 0
+            self.power_link_bridge_connected = True
+            self.power_link_bridge_alarm = data[0] != 0
+            self.power_link_bridge_proxy = data[3] != 0
+            self.power_link_bridge_stealth = data[4] != 0
 
-    def _handle_msgtype_E1(self, _data : bytearray) -> None:  # Visonic Proxy Command Ringback
+    def _handle_msgtype_e1(self, _data : bytearray) -> None:  # Visonic Proxy Command Ringback
         """MsgType=E1 - Visonic Proxy Command Ringback."""
         log.info("Integration has received a proxy command ringback, this indicates that Rx and Tx are incorrectly connected. Are you testing Ringback?")
 
-    def _handle_msgtype_F4(self, data : bytearray) -> bool:  # Static JPG Image
+    def _handle_msgtype_f4(self, data : bytearray) -> bool:  # Static JPG Image
         """MsgType=F4 - Static JPG Image."""
 
         def send_f4_07(zone: int, unique_id: int, image_id: int, status: int) -> None:
@@ -1001,7 +993,7 @@ class MessageHandling(MessageHandlingB0Data):
             self.add_message_to_send_queue(convert_bytearray(f'0d {_body} {_c1:02x} {_c2:02x} 0a'))
 
 
-        #log.debug(f"[handle_msgtypeF4]  data {toString(data)}")
+        #log.debug(f"[handle_msgtypeF4]  data {to_string(data)}")
 
         #      0 - message type  ==>  3=start, 5=data
         #      1 - always 0
@@ -1013,10 +1005,10 @@ class MessageHandling(MessageHandlingB0Data):
 
         pushchange = False
 
-        if self.PanelMode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
-            log.debug(f"[handle_msgtypeF4] PanelMode is {self.PanelMode} so not processing F4 data")
-            if not self.ignoreF4DataMessages:
-                retval = self.image_manager.getCurrentImageRecord()
+        if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
+            log.debug(f"[handle_msgtypeF4] PanelMode is {self.panel_mode} so not processing F4 data")
+            if not self.ignore_f4_data_messages:
+                retval = self.image_manager.get_current_image_record()
                 ir = None if retval is None else retval[1]
                 if ir is not None:
                     zone = ir.zone
@@ -1026,10 +1018,10 @@ class MessageHandling(MessageHandlingB0Data):
                     zone = 0
                 self.send_panel_update(AlCondition.IMAGE_UPDATE, {"finished": True, "state": ABORTED, "zone": zone, "message": "invalid panel mode"})
             self.image_manager.stop()
-            self.ignoreF4DataMessages = True
+            self.ignore_f4_data_messages = True
 
         elif msgtype == 0x03:     # JPG Header
-            log.debug(f"[handle_msgtypeF4]  data {toString(data)}")
+            log.debug(f"[handle_msgtypeF4]  data {to_string(data)}")
             pushchange = True
             zone = (10 * int(data[5] // 16)) + (data[5] % 16)         # the // does integer floor division so always rounds down
             unique_id = data[6]
@@ -1039,13 +1031,13 @@ class MessageHandling(MessageHandlingB0Data):
             totalimages = data[14]                    # 0xFF in the first header of a capture, the real total after that
             crc = (data[15], data[16])                # CRC-16 of the finished image, low byte first
 
-            if self.image_manager.isImageDataInProgress():
+            if self.image_manager.is_image_data_in_progress():
                 # A new header arrived while the previous image was still part built, so that one
                 # is lost. Drop just that image and carry on with this header: binning the whole
                 # capture and locking the zone out until a lastimage happens to arrive costs far
                 # more than the single frame actually lost.
                 log.warning(f"[handle_msgtypeF4]        Previous image incomplete, dropping it and continuing with image {image_id} for zone {zone}")
-                retval = self.image_manager.getCurrentImageRecord()
+                retval = self.image_manager.get_current_image_record()
                 if retval is not None:
                     retval[0].degraded = True
                 self.image_manager.reset_current()
@@ -1056,27 +1048,27 @@ class MessageHandling(MessageHandlingB0Data):
                 if lastimage:
                     self.image_ignore.remove(zone)
 
-            elif zone - 1 in self.SensorList:
+            elif zone - 1 in self.sensor_list:
                 log.debug("[handle_msgtypeF4]        Processing Image Header data")
                 # Initialise the receipt of an image in the ImageManager
-                success = self.image_manager.setCurrent(zone = zone, unique_id = unique_id, image_id = image_id, size = size, sequence = sequence, lastimage = lastimage, totalimages = totalimages, crc = crc)
+                success = self.image_manager.set_current(zone = zone, unique_id = unique_id, image_id = image_id, size = size, sequence = sequence, lastimage = lastimage, totalimages = totalimages, crc = crc)
                 # Assume that we are managing the interaction/protocol with the panel
-                self.ignoreF4DataMessages = not success
+                self.ignore_f4_data_messages = not success
 
             else:
                 log.debug(f"[handle_msgtypeF4]        Panel sending image for Zone {zone} but it does not exist or is not a CAMERA")
 
         elif msgtype == 0x05:   # JPG Data
-            if self.ignoreF4DataMessages:
+            if self.ignore_f4_data_messages:
                 log.debug("[handle_msgtypeF4]        Not processing F4 0x05 data")
 
-            elif self.image_manager.hasStartedSequence():
-                # Image receipt has been initialised by self.image_manager.setCurrent
+            elif self.image_manager.has_started_sequence():
+                # Image receipt has been initialised by self.image_manager.set_current
                 datastart = 4
-                is_in_sequence = self.image_manager.addData(data[datastart:datastart+datalen], sequence)
+                is_in_sequence = self.image_manager.add_data(data[datastart:datastart+datalen], sequence)
                 if is_in_sequence:
-                    if self.image_manager.isImageComplete():
-                        retval = self.image_manager.getLastImageRecord()
+                    if self.image_manager.is_image_complete():
+                        retval = self.image_manager.get_last_image_record()
                         if retval is None:
                             return False
                         izc, ir = retval
@@ -1087,7 +1079,7 @@ class MessageHandling(MessageHandlingB0Data):
                         # can be spotted and asked for again. Give up after MAX_IMAGE_ATTEMPTS and
                         # let the capture carry on: nine good frames beat hanging on a bad fifth.
                         attempt = self.image_manager.note_attempt(ir.zone, ir.image_id)
-                        if not ir.isChecksumValid():
+                        if not ir.is_checksum_valid():
                             if self.image_manager.attempts_left(ir.zone, ir.image_id):
                                 log.debug(f"[handle_msgtypeF4]        Image checksum wrong for zone {ir.zone} image {ir.image_id} (attempt {attempt}), asking for it again")
                                 self.send_panel_update(AlCondition.IMAGE_UPDATE, {"finished": False, "state": DELAYED, "zone": ir.zone, "message": f"image checksum wrong for image {ir.image_id} (attempt {attempt}), asking for it again"})
@@ -1131,7 +1123,7 @@ class MessageHandling(MessageHandlingB0Data):
                         height = 100000
                         if is_audio:
                             log.debug(f"[handle_msgtypeF4]           Got Audio clip for sensor {ir.zone}, {len(ir.buffer)} bytes (RIFF/WAVE)")
-                        elif ir.buffer is not None:
+                        else:
                             # Get the width and height of the image. I assume that if PIL can't load the image then it is corrupt.
                             try:
                                 img = Image.open(io.BytesIO(ir.buffer))
@@ -1150,13 +1142,13 @@ class MessageHandling(MessageHandlingB0Data):
                         #    f1.write(buffer)
                         #    f1.close()
 
-                        if ir.zone - 1 in self.SensorList and (is_audio or (width <= 1024 and height <= 768)):
+                        if ir.zone - 1 in self.sensor_list and (is_audio or (width <= 1024 and height <= 768)):
                             log.debug(f"[handle_msgtypeF4]           Saving {'Audio' if is_audio else 'Image'} for sensor {ir.zone}")
-                            self.SensorList[ir.zone - 1].jpg_data = ir.buffer
-                            self.SensorList[ir.zone - 1].jpg_is_audio = is_audio
-                            self.SensorList[ir.zone - 1].jpg_timestamp = t
-                            self.SensorList[ir.zone - 1].has_jpg = True
-                            self.SensorList[ir.zone - 1].notify(AlSensorCondition.CAMERA)
+                            self.sensor_list[ir.zone - 1].jpg_data = ir.buffer
+                            self.sensor_list[ir.zone - 1].jpg_is_audio = is_audio
+                            self.sensor_list[ir.zone - 1].jpg_timestamp = t
+                            self.sensor_list[ir.zone - 1].has_jpg = True
+                            self.sensor_list[ir.zone - 1].notify(AlSensorCondition.CAMERA)
 
                         # An external bridge (e.g. an ESP32 stream-server built with F4-ack support) can
                         # answer the panel's image acks directly over the serial link, ~3ms after the last
@@ -1180,7 +1172,7 @@ class MessageHandling(MessageHandlingB0Data):
 
                 else:
                     # Received an F4-05 data message out of sequence, get the current image data
-                    retval = self.image_manager.getCurrentImageRecord()
+                    retval = self.image_manager.get_current_image_record()
                     if retval is not None:
                         izc, ir = retval
                         # Ask for same image again
@@ -1194,12 +1186,12 @@ class MessageHandling(MessageHandlingB0Data):
                         self.image_manager.stop()
 
         elif msgtype == 0x01:
-            log.debug(f"[handle_msgtypeF4]  data {toString(data)}")
+            log.debug(f"[handle_msgtypeF4]  data {to_string(data)}")
             log.debug("[handle_msgtypeF4]           Message Type not processed")
             pushchange = True
 
         else:
-            log.debug(f"[handle_msgtypeF4]  not seen data {toString(data)}")
+            log.debug(f"[handle_msgtypeF4]  not seen data {to_string(data)}")
             log.debug("[handle_msgtypeF4]           Message Type not processed")
 
         return pushchange

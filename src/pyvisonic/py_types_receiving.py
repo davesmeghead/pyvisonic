@@ -1,12 +1,12 @@
 """Types for rad received data."""
+import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto
-import logging
 from typing import Final, NamedTuple
 
 from .py_const import B0_35_PANEL_DATA_LOG, B0_42_PANEL_DATA_LOG, OBFUS, DebugLevel
 from .py_enum import DataType, IndexName, Receive
-from .py_utils import b2i, toString
+from .py_utils import b2i, to_string
 
 log = logging.getLogger(__name__)
 
@@ -204,11 +204,11 @@ class Chunky:
                 show_data = pmPanelSettingsB0_35[data_content].display
         index_name = IndexName(self.index).name
         if show_data:
-            return f"type {self.msg_type:<2}  subtype {self.subtype:<3}  sequence {self.sequence:<3}  datasize {self.datasize:<3}  length {self.length:<3}  index {index_name:<14}   data {toString(self.data)}"
+            return f"type {self.msg_type:<2}  subtype {self.subtype:<3}  sequence {self.sequence:<3}  datasize {self.datasize:<3}  length {self.length:<3}  index {index_name:<14}   data {to_string(self.data)}"
         return f"type {self.msg_type:<2}  subtype {self.subtype:<3}  sequence {self.sequence:<3}  datasize {self.datasize:<3}  length {self.length:<3}  index {index_name:<14}   obfus datalen = {len(self.data)}"
 
-    def GetItAll(self) -> str:
+    def get_it_all(self) -> str:
         """Return a raw string that describes the chunk."""
         # Get it all, ignore display setting and obfus
         index_name = IndexName(self.index).name
-        return f"type {self.msg_type:<2}  subtype {self.subtype:<3}  sequence {self.sequence:<3}  datasize {self.datasize:<3}  length {self.length:<3}  index {index_name:<14}   data {toString(self.data)}"
+        return f"type {self.msg_type:<2}  subtype {self.subtype:<3}  sequence {self.sequence:<3}  datasize {self.datasize:<3}  length {self.length:<3}  index {index_name:<14}   data {to_string(self.data)}"

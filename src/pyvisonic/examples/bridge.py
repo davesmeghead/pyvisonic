@@ -6,14 +6,11 @@
 
 #  python bridge.py -address 192.168.X.X -port YYYYY -usb COM1 *>> outty2.txt
 
-# Make sure Ruff ignores f-strings
-# ruff: noqa: G004
-
 import argparse
 import asyncio
+import logging
 from datetime import UTC, datetime
 from functools import partial
-import logging
 from typing import cast
 
 from serialx import create_serial_connection
@@ -38,16 +35,16 @@ class ProtocolBase(asyncio.Protocol):
         self.sender = sender
         self.name = name
         self.deb = deb
-        self.ReceiveData = bytearray(b"")
+        self.receive_data = bytearray(b"")
         self.ef = asyncio.ensure_future(self.transportwriter(), loop=self.loop)
 
-    def _toString(self, array_alpha: bytearray | bytes) -> str:
+    def _to_string(self, array_alpha: bytearray | bytes) -> str:
         return "".join(f"{b:02x} " for b in array_alpha)
 
-    def _toHex(self, d: int) -> str:
+    def _to_hex(self, d: int) -> str:
         return f"{d:02x}"
 
-    def handle_msgtype3F(self, data : bytearray) -> None:
+    def handle_msgtype_3f(self, data : bytearray) -> None:
         """MsgType=3F - Download information. Multiple 3F can follow eachother, if we request more then &HFF bytes."""
 
         _LOGGER.debug("[handle_msgtype3F]")
@@ -59,12 +56,12 @@ class ProtocolBase(asyncio.Protocol):
 
         if i_length != len(data) - 3:  # 3 because -->   index & page & length
             _LOGGER.warning(f"[handle_msgtype3F]        ERROR: Type=3F has an invalid length, Received: {len(data)-3}, Expected: {i_length}")
-            _LOGGER.warning(f"[handle_msgtype3F]                           {self._toString(data)}")
+            _LOGGER.warning(f"[handle_msgtype3F]                           {self._to_string(data)}")
             return
 
         for x in range(i_length):
             val = (i_page * 256) + i_index
-            _LOGGER.debug(self._toHex(i_page) + self._toHex(i_index) + "  (" + str(val) + ")       " + self._toHex(data[x+3]))  # noqa: G003
+            _LOGGER.debug(self._to_hex(i_page) + self._to_hex(i_index) + "  (" + str(val) + ")       " + self._to_hex(data[x+3]))
 
             if i_index == 255:
                 i_index = 0
@@ -77,52 +74,52 @@ class ProtocolBase(asyncio.Protocol):
         """Write to the transport."""
         while True:
             item = await self.receiver.get()
-            if item is None:
+            if item is None: # type: ignore
                 # the producer emits None to indicate that it is done
                 break   # type: ignore[unreachable]
             if self.deb:
-                _LOGGER.debug(f"[sending to {self.name} at {datetime.now(UTC).isoformat()}] : {self._toString(item)}")
+                _LOGGER.debug(f"[sending to {self.name} at {datetime.now(UTC).isoformat()}] : {self._to_string(item)}")
             if self.transport is not None:
                 self.transport.write(item)
 
     # This is called from the loop handler when the connection to the transport is made
-    def connection_made(self, trans: asyncio.BaseTransport) -> None:
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Make the protocol connection to the Panel."""
-        assert isinstance(trans, asyncio.Transport)
-        self.transport = trans
+        assert isinstance(transport, asyncio.Transport)
+        self.transport = transport
         _LOGGER.debug("[Connection] Connected made : %s", self.name)
 
     # check the checksum of received messages
-    def _validatePDU(self, packet: bytearray) -> bool:
+    def _validate_pdu(self, packet: bytearray) -> bool:
         r"""Verify if packet is valid. Packets start with a preamble (\x0D) and end with postamble (\x0A)."""
         # Validate a received message
         # Does it start with a header
-        if packet[:1] != b"\x0D":
+        if not packet or packet[0] != 0x0D:
             return False
         # Does it end with a footer
-        if packet[-1:] != b"\x0A":
+        if packet[-1] != 0x0A:
             return False
 
-        if packet[-2:-1][0] == self._calculateCRC(packet[1:-2])[0] + 1:
-            _LOGGER.debug(f"[_validatePDU] Validated a Packet with a checksum that is 1 more than the actual checksum!!!! {packet[-2:-1][0]} and {self._calculateCRC(packet[1:-2])[0]}")
+        if packet[-2:-1][0] == self._calculate_crc(packet[1:-2])[0] + 1:
+            _LOGGER.debug(f"[_validatePDU] Validated a Packet with a checksum that is 1 more than the actual checksum!!!! {packet[-2:-1][0]} and {self._calculate_crc(packet[1:-2])[0]}")
             return True
 
-        if packet[-2:-1][0] == self._calculateCRC(packet[1:-2])[0] - 1:
-            _LOGGER.debug(f"[_validatePDU] Validated a Packet with a checksum that is 1 less than the actual checksum!!!! {packet[-2:-1][0]} and {self._calculateCRC(packet[1:-2])[0]}")
+        if packet[-2:-1][0] == self._calculate_crc(packet[1:-2])[0] - 1:
+            _LOGGER.debug(f"[_validatePDU] Validated a Packet with a checksum that is 1 less than the actual checksum!!!! {packet[-2:-1][0]} and {self._calculate_crc(packet[1:-2])[0]}")
             return True
 
         # Check the CRC
-        if packet[-2:-1] == self._calculateCRC(packet[1:-2]):
-            # _LOGGER.debug("[_validatePDU] VALID PACKET!")
+        if packet[-2:-1] == self._calculate_crc(packet[1:-2]):
+            # _LOGGER.debug("[_validate_pdu] VALID PACKET!")
             return True
 
         _LOGGER.debug("[_validatePDU] Not valid packet, CRC failed, may be ongoing and not final 0A")
         return False
 
     # calculate the checksum for sending and receiving messages
-    def _calculateCRC(self, msg: bytearray) -> bytearray:
+    def _calculate_crc(self, msg: bytearray) -> bytearray:
         """Calculate CRC Checksum."""
-        # _LOGGER.debug("[_calculateCRC] Calculating for: %s", self._toString(msg))
+        # _LOGGER.debug("[_calculate_crc] Calculating for: %s", self._to_string(msg))
         # Calculate the checksum
         checksum = 0
         for char in msg[0 : len(msg)]:
@@ -132,46 +129,46 @@ class ProtocolBase(asyncio.Protocol):
             checksum = 0x00
         return bytearray([checksum])
 
-    def _resetMessageData(self) -> None:
+    def _reset_message_data(self) -> None:
         # clear our buffer again so we can receive a new packet.
-        self.ReceiveData = bytearray(b"")  # messages should never be longer than 0xC0
+        self.receive_data = bytearray(b"")  # messages should never be longer than 0xC0
 
-    def _processReceivedMessage(self, data: bytearray) -> None:
+    def _process_received_message(self, data: bytearray) -> None:
         if data[1] == 0x3F:  # Download information
-            self.handle_msgtype3F(data[2:-2])
+            self.handle_msgtype_3f(data[2:-2])
 
-    def processByte(self, data: int) -> None:
+    def process_byte(self, data: int) -> None:
         """Process each byte."""
-        pdu_len: int = len(self.ReceiveData)                                # Length of the received data so far
+        pdu_len: int = len(self.receive_data)                                # Length of the received data so far
 
         if pdu_len == 0:
-            self._resetMessageData()
+            self._reset_message_data()
             if data == 0x0D:  # preamble
-                self.ReceiveData.append(data)
-                #_LOGGER.debug("[data receiver] Starting PDU " + self._toString(self.ReceiveData))
+                self.receive_data.append(data)
+                #_LOGGER.debug("[data receiver] Starting PDU " + self._to_string(self.receive_data))
             # else we're trying to resync and walking through the bytes waiting for an 0x0D preamble byte
         elif data == 0x0A:
             # (waiting for 0x0A and got it) OR (actual length == calculated length)
-            self.ReceiveData.append(data)  # add byte to the message buffer
-            #_LOGGER.debug("[data receiver] Building PDU: Checking it " + self._toString(self.ReceiveData))
-            #_msgType = self.ReceiveData[1]
-            if self._validatePDU(self.ReceiveData):
-                self._processReceivedMessage(data=self.ReceiveData)
-                self._resetMessageData()
+            self.receive_data.append(data)  # add byte to the message buffer
+            #_LOGGER.debug("[data receiver] Building PDU: Checking it " + self._to_string(self.receive_data))
+            #_msgType = self.receive_data[1]
+            if self._validate_pdu(self.receive_data):
+                self._process_received_message(data=self.receive_data)
+                self._reset_message_data()
         elif pdu_len <= 0xC0:
-            #_LOGGER.debug("[data receiver] Current PDU " + self._toString(self.ReceiveData) + "    adding " + str(hex(data).upper()))
-            self.ReceiveData.append(data)
+            #_LOGGER.debug("[data receiver] Current PDU " + self._to_string(self.receive_data) + "    adding " + str(hex(data).upper()))
+            self.receive_data.append(data)
         else:
-            _LOGGER.debug(f"[data receiver] Dumping Current PDU {self._toString(self.ReceiveData)}")
-            self._resetMessageData()
+            _LOGGER.debug(f"[data receiver] Dumping Current PDU {self._to_string(self.receive_data)}")
+            self._reset_message_data()
 
     # Process any received bytes (in data as a bytearray)
     def data_received(self, data: bytes) -> None:
-        """Add incoming data to ReceiveData."""
+        """Add incoming data to receive_data."""
         if self.deb:
-            _LOGGER.debug(f"[received from {self.name} at {datetime.now()!s}] : {self._toString(data)}")
+            _LOGGER.debug(f"[received from {self.name} at {datetime.now(UTC)!s}] : {self._to_string(data)}")
             for x in range(len(data)):
-                self.processByte(data[x])
+                self.process_byte(data[x])
 
         self.ef_sender = asyncio.ensure_future(self.sender.put(bytearray(data)))
 
@@ -239,8 +236,8 @@ if len(args.usb) > 0:
     )
 
 if connpc is not None and connalarm is not None:
-    _a = testloop.create_task(connpc)  # noqa: RUF006
-    _b = testloop.create_task(connalarm)  # noqa: RUF006
+    _a = testloop.create_task(connpc)
+    _b = testloop.create_task(connalarm)
 
     try:
         testloop.run_forever()

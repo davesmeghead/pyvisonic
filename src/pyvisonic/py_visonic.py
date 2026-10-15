@@ -6,19 +6,17 @@ Based on the DomotiGa and Vera implementation:
     Thanks to everyone who helped decode the data.
 
   Originally converted to Python module by Wouter Wolkers and David Field
-"""  # noqa: D205, D415
-
-# ruff: noqa: G004, FURB171
+"""
 
 #################################################################
 # PowerMax/Master send and receive messages
 #################################################################
 
 import asyncio
-from collections.abc import Callable
-from copy import deepcopy
 import logging
 import re
+from collections.abc import Callable
+from copy import deepcopy
 from typing import Any, ClassVar
 
 from .py_const import (
@@ -50,7 +48,7 @@ from .py_enum import (
     Send,
 )
 from .py_types_sending import pmSendMsgB0
-from .py_utils import convert_bytearray, toString
+from .py_utils import convert_bytearray, to_string
 from .py_visonic_message_handling import MessageHandling
 
 log = logging.getLogger(__name__)
@@ -100,11 +98,12 @@ PIN_REGEX = re.compile(r"^[0-9]{4}$")
 
 # Event handling and externally callable client functions (plus updatestatus)
 class VisonicProtocol(MessageHandling):
-    """Event Handling."""
+    """The primary external interface for the visonic protocol."""
 
-    ###############################################################################
-    ################# The following functions are called from the client ##########
-    ###############################################################################
+    # This class is not an asyncio Protocol, although it is build using asyncio (tasks etc).
+    # It can be used in an asyncio environment:
+    #    - passing data in and getting data out
+    #    - a set of command functions and callbacks
 
     def __init__(self, loop: asyncio.AbstractEventLoop, force_standard_mode : bool, disable_all_commands : bool, download_code : str | None, user_code_slot: int, offload_f4_ack: bool = False, logger: logging.Logger | None = None) -> None:
         """Initialize class."""
@@ -113,10 +112,10 @@ class VisonicProtocol(MessageHandling):
 
     def shutdown(self) -> None:
         """Shutdown the connection to the panel."""
-        if not self.suspendAllOperations:
+        if not self.suspend_all_operations:
             super()._shutdown()
             # empty the panel settings data when stopped
-            self.suspendAllOperations = True
+            self.suspend_all_operations = True
             self.reset_full()
             log.debug("[Controller] ********************************************************************************")
             log.debug("[Controller] ****************************** Operations Suspended ****************************")
@@ -132,23 +131,18 @@ class VisonicProtocol(MessageHandling):
         super()._reset_connection()
         self.send_panel_update(AlCondition.PUSH_CHANGE)  # push through a panel update to the HA Frontend
 
-    def set_log_events(self, logevents : list[str]) -> None:
-        """Set the Log Event List for A7 message processing."""
-        self.logEventList = logevents
-
     def handle_msgtype_testing(self, packet: bytearray) -> bool:
         """Only used for message testing, not to be used in the full integration."""
-        return self._processReceivedPacket(packet, True, True, True, True)   # process any of the messages for testing
+        return self._process_received_packet(packet, True, True, True, True)   # process any of the messages for testing
 
     def get_partition_status_dict(self, partition : int) -> dict[str, Any]:
         """Get a dictionary representing the panel status."""
         a: dict[str, Any] = {}
-        if partition is not None:
-            if 0 <= partition < MAX_PARTITIONS:
-                a = deepcopy(self.PartitionState[partition].getPartitionData())
-                piu = self.get_partitions_in_use()
-                if isinstance(piu, set) and len(piu) > 1:
-                    a["partition"] = partition + 1
+        if 0 <= partition < MAX_PARTITIONS:
+            a = deepcopy(self.partition_state[partition].get_partition_data())
+            piu = self.get_partitions_in_use()
+            if isinstance(piu, set) and len(piu) > 1:
+                a["partition"] = partition + 1
         return a
 
     # A dictionary that is used to add to the attribute list of the Alarm Control Panel
@@ -156,11 +150,11 @@ class VisonicProtocol(MessageHandling):
     def get_panel_status_dict(self, include_extended_status : bool | None = None) -> dict[str, Any]:
         """Get a dictionary representing the panel status."""
 
-        def getPanelFixedDict() -> dict[str, Any]:
+        def get_panel_fixed_dict() -> dict[str, Any]:
             """Get the panel fixed dictionary."""
             pm = "Unknown"
-            if self.PowerMaster is not None:
-                if self.PowerMaster: # PowerMaster models
+            if self.power_master is not None:
+                if self.power_master: # PowerMaster models
                     pm = "Yes"
                 else:
                     pm = "No"
@@ -175,20 +169,20 @@ class VisonicProtocol(MessageHandling):
             return {key.value: value for key, value in status.items()}
 
         # Take a deepcopy of the panel data and then add to it
-        a: dict[str, Any] = deepcopy(self.PartitionState[0].getPanelData())
-        a |= getPanelFixedDict()
+        a: dict[str, Any] = deepcopy(self.partition_state[0].get_panel_data())
+        a |= get_panel_fixed_dict()
         a |= { TEXT_PROTOCOL_VERSION: LIBRARY_VERSION,
-              "emulationmode": self.PanelMode.name.lower(),
-              TEXT_WATCHDOG_TIMEOUT_TOTAL: self.WatchdogTimeoutCounter,
-              TEXT_WATCHDOG_TIMEOUT_DAY: self.WatchdogTimeoutPastDay
+              "emulationmode": self.panel_mode.name.lower(),
+              TEXT_WATCHDOG_TIMEOUT_TOTAL: self.watchdog_timeout_counter,
+              TEXT_WATCHDOG_TIMEOUT_DAY: self.watchdog_timeout_past_day
              }
-        if not self.ForceStandardMode:
+        if not self.force_standard_mode:
             a |= {
-                TEXT_DOWNLOAD_TIMEOUT: max(0, self.DownloadCounter - 1),      # This is the number of download attempts and it would normally be 1 so subtract 1 off => the number of retries
-                TEXT_DL_MESSAGE_RETRIES: self.pmDownloadRetryCount            # This is for individual 3F download failures
+                TEXT_DOWNLOAD_TIMEOUT: max(0, self.download_counter - 1),      # This is the number of download attempts and it would normally be 1 so subtract 1 off => the number of retries
+                TEXT_DL_MESSAGE_RETRIES: self.pm_download_retry_count            # This is for individual 3F download failures
             }
-        if include_extended_status and len(self.PanelStatus) > 0:
-            a |= panel_status_to_dict(self.PanelStatus)
+        if include_extended_status and len(self.panel_status) > 0:
+            a |= panel_status_to_dict(self.panel_status)
         return a
 
     def get_sensor_bypass_state(self) -> None:
@@ -196,15 +190,15 @@ class VisonicProtocol(MessageHandling):
         if self.is_power_master():
             # Request the bypass status from the panel to update the sensors
             #     Instead of delaying the request, do it immediate
-            #self.B0_Wanted.add(B0SubType.ZONE_BYPASS)
-            s = self._create_B0_Data_Request(taglist = {pmSendMsgB0[B0SubType.ZONE_BYPASS].data})
+            #self.b0_wanted.add(B0SubType.ZONE_BYPASS)
+            s = self._create_b0_data_request(taglist = {pmSendMsgB0[B0SubType.ZONE_BYPASS].data})
             self.add_message_to_send_queue(s, priority = MessagePriority.IMMEDIATE)
         else:
             # PowerMax
             # Request the bypass status from the panel to update the sensors
             self.add_message_to_send_queue(Send.BYPASSTAT, priority = MessagePriority.IMMEDIATE)
 
-    def _createPin(self, pin : str | None) -> bytearray:
+    def _create_pin(self, pin : str | None) -> bytearray:
         # Pin is None when either we can perform the action without a code OR we're in Powerlink/StandardPlus and have the pin code to use
         # Other cases, the pin must be set
         if pin is None:
@@ -222,20 +216,20 @@ class VisonicProtocol(MessageHandling):
     def panel_command(self, state : AlPanelCommand, code : str | None = "", partitions : set[int] | None = None) -> AlCommandStatus:
         """Send a request to the panel to Arm/Disarm."""
 
-        if self.pmDownloadMode:
+        if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
 
-        if self.PanelMode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
+        if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
             return AlCommandStatus.FAIL_INVALID_STATE
 
-        bpin = self._createPin(code)
+        bpin = self._create_pin(code)
         # Ensure that the state is valid
         if state in pmArmMode:
             arm_code = bytearray()
             # Retrieve the code to send to the panel
             arm_code.append(pmArmMode[state])
             if partitions is None:
-                partitions = {1,2,3}
+                partitions = {0,1,2}
             partition = 0
             for i in partitions:
                 partition = partition | (1 << i)
@@ -270,9 +264,9 @@ class VisonicProtocol(MessageHandling):
         """Send an Switch command to the panel."""
         # Send.SWITCH      : VisonicCommand(convert_bytearray('A4 00 00 00 00 00 99 99 99 00 00 43'), None  , False, "Switch Data" ),
         #log.debug(f"[SendSwitchCommand] Processing {device} {type(device)}")
-        if self.pmDownloadMode:
+        if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
-        if self.PanelMode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
+        if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
             return AlCommandStatus.FAIL_SWITCH_PROBLEM
         if device < 0 or device > 15:
             return AlCommandStatus.FAIL_ENTITY_INCORRECT
@@ -286,23 +280,23 @@ class VisonicProtocol(MessageHandling):
         self.add_message_to_send_queue(Send.SWITCH, priority = MessagePriority.IMMEDIATE, options=[ (6, what), (7, byte1), (8, byte2) ])
         self.add_message_to_send_queue(Send.STATUS_SEN, priority = MessagePriority.IMMEDIATE)
         if self.is_power_master():
-            self.B0_Wanted.add(B0SubType.PANEL_STATE_1)        # 24
+            self.b0_wanted.add(B0SubType.PANEL_STATE_1)        # 24
         return AlCommandStatus.SUCCESS
 
     def get_sensor_image(self, device : int, count : int) -> AlCommandStatus:
         """Get the jpg camera image."""
-        if self.pmDownloadMode:
+        if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
-        if self.PanelMode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
+        if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
             return AlCommandStatus.FAIL_INVALID_STATE
-        if device - 1 in self.SensorList and count >= 1:
+        if device - 1 in self.sensor_list and count >= 1:
             # Both flags only reset on a fresh F4-03, which the panel will not send while it is
             # stuck resending an image we are discarding - so they latch and refuse every later
             # request. An explicit user request is the right point to drop them.
-            if self.ignoreF4DataMessages or device in self.image_ignore:
+            if self.ignore_f4_data_messages or device in self.image_ignore:
                 log.debug(f"[get_sensor_image] Clearing stale ignore state for zone {device} before requesting images")
                 self.image_ignore.discard(device)
-                self.ignoreF4DataMessages = False
+                self.ignore_f4_data_messages = False
             if self.image_manager.create(device, count):   # This makes sure that there isn't an ongoing image retrieval for this sensor
                 self.add_message_to_send_queue(Send.GET_IMAGE, options=[ (3, count), (2, device) ])
                 return AlCommandStatus.SUCCESS
@@ -310,13 +304,13 @@ class VisonicProtocol(MessageHandling):
 
     async def set_panel_baud(self, baudrate : int) -> AlCommandStatus:
         """Set the panel baudrate."""
-        if self.pmDownloadMode:
+        if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
-        if self.is_power_master() and self.PanelMode in [AlPanelMode.POWERLINK]:                  # Only do this for powermaster panels and in powerlink mode
+        if self.is_power_master() and self.panel_mode in [AlPanelMode.POWERLINK]:                  # Only do this for powermaster panels and in powerlink mode
             # Just to make sure that an invalid command is because of the baud change
-            self.beeZeroInvalidCommand = None
+            self.bee_zero_invalid_command = None
 
-            bpin = self._createPin(None)                       # bytearray pin
+            bpin = self._create_pin(None)                       # bytearray pin
 
             y1, y2 = (baudrate & 0xFFFF).to_bytes(2, "little")
             baud_data = bytearray([y2, y1])
@@ -329,11 +323,11 @@ class VisonicProtocol(MessageHandling):
 
             await asyncio.sleep(0.6)  # Wait to see if the panel has responded with an invalid command
 
-            # While the set baud command is sent and the sleep takes place, self.beeZeroInvalidCommand could have been set
+            # While the set baud command is sent and the sleep takes place, self.bee_zero_invalid_command could have been set
             #  But the type checker doesn't like it so use a tmp variable
-            tmp: int | None = self.beeZeroInvalidCommand
+            tmp: int | None = self.bee_zero_invalid_command
             if tmp is not None and tmp == 4:
-                self.beeZeroInvalidCommand = None
+                self.bee_zero_invalid_command = None
                 log.debug("    Panel responded with invalid command, assume panel config prevented baud change")
                 return AlCommandStatus.FAIL_PANEL_CONFIG_PREVENTED
 
@@ -343,14 +337,14 @@ class VisonicProtocol(MessageHandling):
     # Individually or as a set, arm/disarm the sensors
     #   This sets/clears the bypass for each sensor
     #       sensor is the zone number 1 to 31 or 1 to 64
-    #       bypassValue is a boolean ( True then Bypass, False then Arm )
+    #       bypass_value is a boolean ( True then Bypass, False then Arm )
     #       optional pin, if not provided then try to use the EPROM downloaded pin if in powerlink  (only used for PowerMax)
     #   Return : success or not
     #
-    def bypass_command(self, sensor : int | set[int], bypassValue : bool, code : str | None = "") -> AlCommandStatus:
+    def bypass_command(self, sensor : int | set[int], bypass_value : bool, code : str | None = "") -> AlCommandStatus:
         """Set or Clear Sensor Bypass."""
 
-        def createBypassB0Message(bypass : bool, zone_data : bytearray, pin : bytearray) -> bytearray:
+        def create_bypass_b0_message(bypass : bool, zone_data : bytearray, pin : bytearray) -> bytearray:
 
             pmaster_request_data = convert_bytearray("00 ff 01 03 08") + zone_data
             ll = len(pmaster_request_data) + 2
@@ -360,25 +354,25 @@ class VisonicProtocol(MessageHandling):
 
             pmaster_data = pmaster_request_start + pmaster_request_data + pmaster_request_end
 
-            checksum = self._calculateCRC(pmaster_data)   # returns a bytearray with a single byte
+            checksum = self._calculate_crc(pmaster_data)   # returns a bytearray with a single byte
             to_send = bytearray([Packet.HEADER]) + pmaster_data + checksum + bytearray([Packet.FOOTER])
 
-            log.debug(f"[_createBypassB0Message] Returning {toString(to_send)}")
+            log.debug(f"[_createBypassB0Message] Returning {to_string(to_send)}")
             return to_send
 
-        if self.pmDownloadMode:
+        if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
-        if self.PanelMode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
+        if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
             return AlCommandStatus.FAIL_PANEL_CONFIG_PREVENTED
         if self.panel_settings[PanelSetting.PanelBypass].data is None or self.panel_settings[PanelSetting.PanelBypass].data == NOBYPASSSTR:
             return AlCommandStatus.FAIL_INVALID_STATE
 
         bypassint = 0
-        if isinstance(sensor, int) and (sensor - 1) in self.SensorList:
+        if isinstance(sensor, int) and (sensor - 1) in self.sensor_list:
             bypassint = 1 << (sensor - 1)
         elif isinstance(sensor, set):
             for s in sensor:
-                if s - 1 in self.SensorList:
+                if s - 1 in self.sensor_list:
                     bypassint = bypassint | (1 << (s - 1))
         if bypassint == 0:
             return AlCommandStatus.FAIL_ENTITY_INCORRECT
@@ -388,15 +382,15 @@ class VisonicProtocol(MessageHandling):
             #log.debug(f"[SensorArmState]  bypass_command {hexify(bypassint)}")
             y1, y2, y3, y4, y5, y6, y7, y8 = (bypassint & 0xFFFFFFFFFFFFFFFF).to_bytes(8, "little")
             bypass_data = bytearray([y1, y2, y3, y4, y5, y6, y7, y8])
-            log.debug(f"[SensorArmState]  bypass_command data = {toString(bypass_data)}")
+            log.debug(f"[SensorArmState]  bypass_command data = {to_string(bypass_data)}")
 
             if len(bypass_data) == 8:
-                sd: bytearray = createBypassB0Message(bypassValue, bypass_data, convert_bytearray(self.DownloadCode))
+                sd: bytearray = create_bypass_b0_message(bypass_value, bypass_data, convert_bytearray(self.download_code))
                 self.add_message_to_send_queue(sd, priority = MessagePriority.IMMEDIATE)
                 # Request the bypass status from the panel to update the sensors
                 #     Instead of delaying the request, do it immediate
-                #self.B0_Wanted.add(B0SubType.ZONE_BYPASS)
-                sd = self._create_B0_Data_Request(taglist = {pmSendMsgB0[B0SubType.ZONE_BYPASS].data})
+                #self.b0_wanted.add(B0SubType.ZONE_BYPASS)
+                sd = self._create_b0_data_request(taglist = {pmSendMsgB0[B0SubType.ZONE_BYPASS].data})
                 self.add_message_to_send_queue(sd, priority = MessagePriority.IMMEDIATE)
                 return AlCommandStatus.SUCCESS
         else:
@@ -407,14 +401,14 @@ class VisonicProtocol(MessageHandling):
             #      bytes 3 to 6 are the Enable bits for the 32 zones
             #      bytes 7 to 10 are the Disable bits for the 32 zones
             #      byte 11 is Packet.POWERLINK_TERMINAL
-            bpin = self._createPin(code)
+            bpin = self._create_pin(code)
             #log.debug(f"[SensorArmState]  bypass_command {hexify(bypassint)}")
             y1, y2, y3, y4 = (bypassint & 0xFFFFFFFF).to_bytes(4, "little")
             bypass_data = bytearray([y1, y2, y3, y4])
-            log.debug(f"[SensorArmState]  bypass_command data = {toString(bypass_data)}")
+            log.debug(f"[SensorArmState]  bypass_command data = {to_string(bypass_data)}")
 
             if len(bypass_data) == 4:
-                if bypassValue:
+                if bypass_value:
                     self.add_message_to_send_queue(Send.BYPASSEN, priority = MessagePriority.IMMEDIATE, options=[ (1, bpin), (3, bypass_data) ])
                 else:
                     self.add_message_to_send_queue(Send.BYPASSDI, priority = MessagePriority.IMMEDIATE, options=[ (1, bpin), (7, bypass_data) ])
@@ -425,54 +419,56 @@ class VisonicProtocol(MessageHandling):
 
     def get_panel_model(self) -> str:
         """Get the panel model."""
-        return self.PanelModel
+        return self.panel_model
 
     def get_panel_mode(self) -> AlPanelMode:
         """Get the panel mode."""
-        if self.suspendAllOperations:
-            self.PanelMode = AlPanelMode.STOPPED
-        return self.PanelMode
+        if self.suspend_all_operations:
+            self.panel_mode = AlPanelMode.STOPPED
+        return self.panel_mode
 
-    def is_siren_active(self, partition: int) -> tuple[bool, int, AlAlarmType]:
+    def is_siren_active(self, partition: int | None) -> tuple[bool, int, AlAlarmType]:
         """Get the siren active state."""
-        if not self.suspendAllOperations:
+        if not self.suspend_all_operations and partition is not None and 0 <= partition < MAX_PARTITIONS:
             # If specific partition requested, check just that one
-            if partition is not None and 0 <= partition < MAX_PARTITIONS:
-                p_state = self.PartitionState[partition]
-                if p_state.SirenActive:
-                    device_id = p_state.SirenActiveDeviceTrigger.id if p_state.SirenActiveDeviceTrigger else 0
-                    return True, device_id, AlAlarmType.INTRUDER if p_state.PanelIntruderStatus else p_state.PanelAlarmStatus
+            p_state = self.partition_state[partition]
+            if p_state.siren_active:
+                device_id = p_state.siren_active_device_trigger.id if p_state.siren_active_device_trigger else 0
+                return True, device_id, AlAlarmType.INTRUDER if p_state.panel_intruder_status else p_state.panel_alarm_status
 
         return False, 0, AlAlarmType.NONE
 
-    def get_partition_status(self, partition: int) -> AlPanelStatus:
+    def get_panel_ident(self) -> str:
+        """Get the six-character panel identifier, or empty when unavailable."""
+        ident = self.panel_settings[PanelSetting.PanelIdent].tostring()
+        return ident if len(ident) == 6 and ident.isascii() and ident.isalnum() else ""
+
+    def get_partition_status(self, partition: int | None) -> AlPanelStatus:
         """Get the panel status."""
-        if not self.suspendAllOperations:
-            if 0 <= partition < MAX_PARTITIONS:
-                return self.PartitionState[partition].PanelStateData
+        if not self.suspend_all_operations and partition is not None and 0 <= partition < MAX_PARTITIONS:
+            return self.partition_state[partition].panel_state_data
         return AlPanelStatus.UNKNOWN
 
-    def is_panel_ready(self, partition: int) -> bool:
+    def is_panel_ready(self, partition: int | None) -> bool:
         """Get the panel ready state."""
-        if not self.suspendAllOperations:
-            if 0 <= partition < MAX_PARTITIONS:
-                return self.PartitionState[partition].PanelReady
+        if not self.suspend_all_operations and partition is not None and 0 <= partition < MAX_PARTITIONS:
+            return self.partition_state[partition].panel_ready
         return False
 
     # Get the Event Log
     #       optional pin, if not provided then try to use the EPROM downloaded pin if in powerlink
     def get_event_log(self, code : str | None = "") -> AlCommandStatus:
         """Get Panel Event Log."""
-        if self.pmDownloadMode:
+        if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
-        if self.PanelMode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
+        if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
             return AlCommandStatus.FAIL_INVALID_STATE
         log.debug("get_event_log")
-        self.eventCount = 0
+        self.event_count = 0
         #if self.is_power_master():
-        #    self.B0_Wanted.add(B0SubType.EVENT_LOG)
+        #    self.b0_wanted.add(B0SubType.EVENT_LOG)
         #else:
-        bpin = self._createPin(code)
+        bpin = self._create_pin(code)
         self.add_message_to_send_queue(Send.EVENTLOG, priority = MessagePriority.URGENT, options=[ (4, bpin) ])
         return AlCommandStatus.SUCCESS
 
@@ -483,6 +479,8 @@ class VisonicProtocol(MessageHandling):
 
 class VisonicProtocolClient(asyncio.Protocol):
     """Visonic Protocol Client."""
+
+    # This class specifically provides an asyncio.Protocol wrapper around the pyvisonic library
 
     connection_set: ClassVar[set[VisonicProtocolClient]] = set()  # class-level set to track all active connections
 
@@ -508,19 +506,19 @@ class VisonicProtocolClient(asyncio.Protocol):
     def data_received(self, data: bytes | bytearray) -> None:
         """Visonic Protocol client."""
         #log.debug(f"Received Data {data}")
-        if self.vp is not None and self._transport_valid and not self.paused:
+        if self._transport_valid and not self.paused:
             self.vp.data_received(bytearray(data))
 
-    def connection_made(self, trans: asyncio.BaseTransport) -> None:
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Connection made."""
-        p = trans.get_protocol()
+        p = transport.get_protocol()
         if not self.valid or p is not self:
             log.debug("[ClientVisonicProtocol] connection_made for an orphaned protocol, closing transport")
-            trans.close()
+            transport.close()
             return
         log.debug("[ClientVisonicProtocol] connection_made Whooooo")
-        assert isinstance(trans, asyncio.Transport)
-        self._transport = trans
+        assert isinstance(transport, asyncio.Transport)
+        self._transport = transport
         self._transport_valid = True
         self.connection_set.add(self)
         self.vp.set_send_data(self.write_callback)
@@ -554,7 +552,7 @@ class VisonicProtocolClient(asyncio.Protocol):
         # set it to None here so that the connection_lost does not call the callback
         self._disconnection_callback = None
         self.valid = False
-        if self._transport_valid and self._transport is not None:
+        if self._transport_valid:
             log.debug("[ClientVisonicProtocol] protocol closing down => closing transport")
             self._transport.close()
         self._transport_valid = False
@@ -567,16 +565,16 @@ class VisonicProtocolClient(asyncio.Protocol):
         return self._transport if self.valid and self._transport_valid else None
 
     def pause(self) -> None:
-        """Pause vp and transport, remove from connections."""
+        """Pause vp and transport."""
         if self._transport_valid and not self.paused:
             self.vp.pause()
-            self.connection_set.discard(self)
+            #self.connection_set.discard(self)
             self.paused = True
 
     def resume(self) -> None:
-        """Resume vp, transport and add to connections."""
+        """Resume vp, transport."""
         if self._transport_valid and self.paused:
-            self.connection_set.add(self)
+            #self.connection_set.add(self)
             self.vp.resume()
             self.paused = False
         else:

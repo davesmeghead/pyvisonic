@@ -1,8 +1,8 @@
 """Utility Functions."""
 
-from datetime import UTC, datetime
 import logging
 import re
+from datetime import UTC, datetime
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def convert_bytearray(st: str) -> bytearray:
     return bytearray.fromhex(st)
 
 # Convert byte array to a string of hex values
-def toString(array_alpha: bytearray | memoryview | bytes, gap: str = " ") -> str:
+def to_string(array_alpha: bytearray | memoryview | bytes, gap: str = " ") -> str:
     """Convert byte array to a string of hex values."""
 #    return ("".join(("%02x"+gap) % b for b in array_alpha))[:-len(gap)] if len(gap) > 0 else "".join(f"{b:02x}" for b in array_alpha)
     return gap.join(f"{b:02x}" for b in array_alpha)
@@ -51,7 +51,7 @@ def get_utc_time() -> datetime:
 def b2i(data: bytearray | bytes, big_endian: bool = False) -> int:
     """Convert bytes to int."""
     return int.from_bytes(
-        data if isinstance(data, (bytearray, bytes)) else bytes(data),
+        data if isinstance(data, (bytearray, bytes)) else bytes(data), # type: ignore
         "big" if big_endian else "little"
     )
 

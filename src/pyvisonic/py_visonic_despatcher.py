@@ -1,13 +1,13 @@
 """Visonic Despatcher - send dat to the panel."""
 
-# ruff: noqa: G004, C901, BLE001
+# ruff: noqa: BLE001
 
 import asyncio
+import logging
+import traceback
 from collections.abc import Callable
 from datetime import timedelta
 from enum import Enum, auto
-import logging
-import traceback
 
 from .py_const import (
     MINIMUM_PDU_TIME_INTERVAL_MILLISECS_POWERMASTER,
@@ -27,7 +27,7 @@ from .py_enum import (
     Send,
 )
 from .py_types_sending import VisonicListEntry
-from .py_utils import get_utc_time, toString
+from .py_utils import get_utc_time, to_string
 from .py_visonic_devices import ManageDevices
 
 log = logging.getLogger(__name__)
@@ -61,14 +61,14 @@ class Despatcher(ManageDevices):
         self._despatcher_exception : bool = False
         self._send_data: Callable[..., None] | None = None
         # Mark's Powerlink Bridge
-        self.PowerLinkBridgeConnected : bool = False   # This is set true on first receipt of an E0.  It means that there is a server running to communicate with
-        self.PowerLinkBridgeAlarm : bool = False       # The server has an Alarm Panel connection
-        self.PowerLinkBridgeStealth : bool = False     # The server is in stealth mode (giving this integration sole access to the panel)
-        self.PowerLinkBridgeProxy : bool = False       # The server is acting in proxy mode i.e. it supports a Visonic Go connection to an external site)
+        self.power_link_bridge_connected : bool = False   # This is set true on first receipt of an E0.  It means that there is a server running to communicate with
+        self.power_link_bridge_alarm : bool = False       # The server has an Alarm Panel connection
+        self.power_link_bridge_stealth : bool = False     # The server is in stealth mode (giving this integration sole access to the panel)
+        self.power_link_bridge_proxy : bool = False       # The server is acting in proxy mode i.e. it supports a Visonic Go connection to an external site)
 
-        self.B0_Wanted: set[int | B0SubType] = set()
-        self.B0_Waiting: set[int | B0SubType] = set()
-        self.B0_LastPanelStateTime = get_utc_time()
+        self.b0_wanted: set[int | B0SubType] = set()
+        self.b0_waiting: set[int | B0SubType] = set()
+        self.b0_last_panel_state_time = get_utc_time()
         self._triggered_download = False
 
     def _reset_connection(self) -> None:
@@ -96,9 +96,9 @@ class Despatcher(ManageDevices):
             s = s - 1
 
     # This sets the callback (to write to the panel) and starts the sequencer
-    def set_send_data(self, send_function : Callable[..., None] | None) -> None:
+    def set_send_data(self, cb : Callable[..., None] | None) -> None:
         """Set the callback connection to the Panel."""
-        self._send_data = send_function
+        self._send_data = cb
         log.debug("[Connection] Callback set to send panel data")
 
     def _start_despatcher(self) -> None:
@@ -142,12 +142,12 @@ class Despatcher(ManageDevices):
         # restart the watchdog and keep-alive counters
         self._reset_watchdog_timeout()
         self._reset_keep_alive_messages()
-        if self.PowerLinkBridgeConnected:
+        if self.power_link_bridge_connected:
             if self.is_power_master():
-                self.B0_Wanted.add(B0SubType.PANEL_STATE_1)        # 24
+                self.b0_wanted.add(B0SubType.PANEL_STATE_1)        # 24
             else:
                 self.add_message_to_send_queue(Send.STATUS)
-        elif self.PanelMode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK]:
+        elif self.panel_mode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK]:
             # Send RESTORE to the panel
             self.add_message_to_send_queue(Send.RESTORE)  # also gives status.  This is an AB message which we can't send to POWERLINK_BRIDGED
         else:
@@ -165,7 +165,7 @@ class Despatcher(ManageDevices):
                 log.debug("[_despatcher] ******************************* Send Callback Invalid ********************************")
                 log.debug("[_despatcher] **************************************************************************************")
 
-        def checkQueuePriorityLevel() -> int:
+        def check_queue_priority_level() -> int:
             if not self._is_send_queue_empty():
                 #log.debug(f"[_despatcher]  Checking The head of the queue")
                 priority, _item = self._send_queue.peek_nowait()
@@ -183,10 +183,10 @@ class Despatcher(ManageDevices):
             return -1.0
 
         # Function to send all PDU messages to the panel
-        def sendPdu(instruction: VisonicListEntry | None) -> tuple[DespatchError, float]:        # return the delay before sending the next PDU
+        def send_pdu(instruction: VisonicListEntry | None) -> tuple[DespatchError, float]:        # return the delay before sending the next PDU
             """Encode and put packet string onto write buffer."""
 
-            if self.suspendAllOperations:
+            if self.suspend_all_operations:
                 log.debug("[sendPdu] Suspended all operations, not sending PDU")
                 return DespatchError.SUSPENDED, -1.0
 
@@ -206,21 +206,21 @@ class Despatcher(ManageDevices):
             command = None
 
             if instruction.raw is not None:
-                data_out = instruction.insertOptions(instruction.raw)
+                data_out = instruction.insert_options(instruction.raw)
 
             elif instruction.command is not None:
                 # Send a command to the panel
                 command = instruction.command
-                data = instruction.insertOptions(command.data)
+                data = instruction.insert_options(command.data)
 
-                # log.debug(f"[sendPdu] input data: {toString(packet)}")
+                # log.debug(f"[send_pdu] input data: {to_string(packet)}")
                 # First add header (Packet.HEADER), then the packet, then crc and footer (Packet.FOOTER)
                 data_out = bytearray([Packet.HEADER])
                 data_out += data
-                if self.AB_CRC_Type_Alternate and (data[0] == 0xAB):
-                    data_out += self._calculateCRCAlt(data)
+                if self.ab_crc_type_alternate and (data[0] == 0xAB):
+                    data_out += self._calculate_crc_alt(data)
                 else:
-                    data_out += self._calculateCRC(data)
+                    data_out += self._calculate_crc(data)
                 data_out += bytearray([Packet.FOOTER])
             else:
                 log.warning("[sendPdu]      Invalid message data, not sending anything to the panel")
@@ -236,21 +236,21 @@ class Despatcher(ManageDevices):
 
             if data_out[1] != Receive.ACKNOWLEDGE:
                 # The message is not an acknowledge back to the panel, then save it
-                self.pmLastSentMessage = instruction
+                self.pm_last_sent_message = instruction
 
             if command is not None and command.download:
-                self.pmDownloadMode = True
+                self.pm_download_mode = True
                 self._triggered_download = False
                 log.debug("[sendPdu] Setting Download Mode to true")
 
             # Log some useful information in debug mode
             if command is not None and command.debugprint == DebugLevel.FULL:
-                log.debug(f"[sendPdu] Sent Command ({command.msg})    raw data {toString(data_out)}   waiting for message response {[hex(no).upper() for no in self.pmExpectedResponse]}")
+                log.debug(f"[sendPdu] Sent Command ({command.msg})    raw data {to_string(data_out)}   waiting for message response {[hex(no).upper() for no in self.pm_expected_response]}")
             elif command is not None and command.debugprint == DebugLevel.CMD:
-                log.debug(f"[sendPdu] Sent Command ({command.msg})    waiting for message response {[hex(no).upper() for no in self.pmExpectedResponse]}")
+                log.debug(f"[sendPdu] Sent Command ({command.msg})    waiting for message response {[hex(no).upper() for no in self.pm_expected_response]}")
             elif instruction.raw is not None:
                 # Assume raw data to send is not obfuscated for now
-                log.debug(f"[sendPdu] Sent Raw Command      raw data {toString(data_out[:4] if OBFUS else data_out)}   waiting for message response {[hex(no).upper() for no in self.pmExpectedResponse]}")
+                log.debug(f"[sendPdu] Sent Raw Command      raw data {to_string(data_out[:4] if OBFUS else data_out)}   waiting for message response {[hex(no).upper() for no in self.pm_expected_response]}")
 
             if command is not None and command.waittime > 0.0:
                 return DespatchError.SUCCESS, command.waittime
@@ -258,8 +258,8 @@ class Despatcher(ManageDevices):
 
         log.debug("[_despatcher]  Starting")
         self._despatcher_exception = False
-        await wait_for_send_data_func(20) # Wait up to 20 seconds for the callback to be setup, if it isn't then other functions set self.suspendAllOperations to True
-        while not self.suspendAllOperations:
+        await wait_for_send_data_func(20) # Wait up to 20 seconds for the callback to be setup, if it isn't then other functions set self.suspend_all_operations to True
+        while not self.suspend_all_operations:
             try:
                 await self._pause_event.wait()  # pauses here if cleared
                 post_delay: float = 0.01
@@ -267,7 +267,7 @@ class Despatcher(ManageDevices):
                 interval = get_utc_time() - self._last_transaction_time
                 write_status = DespatchError.SUCCESS  # combined with post_delay creates a small delay in the loop if nothing to process
 
-                if len(self.pmExpectedResponse) == 0 or (not self._is_send_queue_empty() and checkQueuePriorityLevel() < 2):
+                if len(self.pm_expected_response) == 0 or (not self._is_send_queue_empty() and check_queue_priority_level() < 2):
                     # Here when either:
                     #     The expected response list is empty so we're not waiting for a specific message to be received before sending the next
                     #             in this case the get function will block waiting
@@ -280,43 +280,43 @@ class Despatcher(ManageDevices):
                         #log.debug(f"[_despatcher]  sleeping for {s} seconds")
                         await asyncio.sleep(s)
                     # since we might have been asleep, check it again :)
-                    if not self.suspendAllOperations:
+                    if not self.suspend_all_operations:
                         #log.debug(f"[_despatcher] Start Get      queue size {self._send_queue.qsize()}")
                         # pop the highest priority and oldest item from the list, this could be the only item.
-                        d = await self._send_queue.get()  # this blocks waiting for something to be added to the queue, nothing else is relevant as pmExpectedResponse is empty and can only be added to by calling sendPdu
+                        d = await self._send_queue.get()  # this blocks waiting for something to be added to the queue, nothing else is relevant as pm_expected_response is empty and can only be added to by calling send_pdu
                         #log.debug(f"[_despatcher] Get worked and got something priority={d[0]}          queue size {self._send_queue.qsize()}")
 
                         # since we might have been waiting for something to send, check it again :)
-                        if not self.suspendAllOperations:
+                        if not self.suspend_all_operations:
                             instruction: VisonicListEntry = d[1]   # PriorityQueue is put as a tuple (priority, viscommand), so get the viscommand
                             if len(instruction.response) > 0:
                                 # update the expected response list straight away (without having to wait for it to be actually sent) to make sure protocol is followed
-                                self.pmExpectedResponse.update(instruction.response)
+                                self.pm_expected_response.update(instruction.response)
                             self._send_queue.task_done()
-                            #log.debug(f"[_despatcher] _despatcher sending it to sendPdu, instruction={instruction}          queue size {self._send_queue.qsize()}")
-                            write_status, post_delay = sendPdu(instruction)
+                            #log.debug(f"[_despatcher] _despatcher sending it to send_pdu, instruction={instruction}          queue size {self._send_queue.qsize()}")
+                            write_status, post_delay = send_pdu(instruction)
                             #log.debug(f"[_despatcher] Nothing to do      queue size {self._send_queue.qsize()}")
                 elif interval > RESPONSE_TIMEOUT:
                     # If the panel is lazy or we've got the timing wrong........
                     # Expected response timeouts are only a problem when in Powerlink Mode as we expect a response
                     #   But in all modes, give the panel a self._trigger_restore_status
-                    if len(self.pmExpectedResponse) == 1 and Receive.ACKNOWLEDGE in self.pmExpectedResponse:
-                        self.pmExpectedResponse = set()  # If it's only for an acknowledge response then ignore it
+                    if len(self.pm_expected_response) == 1 and Receive.ACKNOWLEDGE in self.pm_expected_response:
+                        self.pm_expected_response = set()  # If it's only for an acknowledge response then ignore it
                     else:
-                        st = '[{}]'.format(', '.join(hex(x) for x in self.pmExpectedResponse))
+                        st = '[{}]'.format(', '.join(hex(x) for x in self.pm_expected_response))
                         log.debug("[_despatcher] ****************************** Response Timer Expired ********************************")
                         log.debug(f"[_despatcher]                While Waiting for: {st}")
                         # Reset Send state (clear queue and reset flags)
                         self._clear_receive_response_list()
                         self._trigger_restore_status()                                                # Clear message buffers and send a Restore (if in Powerlink or standard plus) or Status (not in Powerlink) to the Panel
-                elif self.pmLastSentMessage is not None and interval > RESEND_MESSAGE_TIMEOUT:
+                elif self.pm_last_sent_message is not None and interval > RESEND_MESSAGE_TIMEOUT:
                     #   If there's a timeout then resend the previous message. If that doesn't work then dump the message and continue, but log the error
-                    if not self.pmLastSentMessage.triedResendingMessage:
+                    if not self.pm_last_sent_message.tried_resending_message:
                         # resend the last message
                         log.debug("[_despatcher] ****************************** Resend Timer Expired ********************************")
-                        log.debug(f"[_despatcher]                Re-Sending last message  {self.pmLastSentMessage.command.msg if self.pmLastSentMessage.command is not None else "Undefined"}")
-                        self.pmLastSentMessage.triedResendingMessage = True
-                        write_status, post_delay = sendPdu(self.pmLastSentMessage)
+                        log.debug(f"[_despatcher]                Re-Sending last message  {self.pm_last_sent_message.command.msg if self.pm_last_sent_message.command is not None else "Undefined"}")
+                        self.pm_last_sent_message.tried_resending_message = True
+                        write_status, post_delay = send_pdu(self.pm_last_sent_message)
                     else:
                         # tried resending once, no point in trying again so reset settings, start from scratch
                         log.debug("[_despatcher] ****************************** Resend Timer Expired ********************************")
@@ -332,7 +332,7 @@ class Despatcher(ManageDevices):
                         self._report_problem(AlTerminationType.EXTERNAL_TERMINATION)
 
                 # implement any post delay for the message
-                if not self.suspendAllOperations and write_status == DespatchError.SUCCESS and post_delay >= 0.0:  # Check send queue
+                if not self.suspend_all_operations and write_status == DespatchError.SUCCESS and post_delay >= 0.0:  # Check send queue
                     #log.debug(f"[_despatcher]  Command has a post delay of {post_delay}")
                     await asyncio.sleep(post_delay)
 

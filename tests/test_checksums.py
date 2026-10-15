@@ -13,19 +13,19 @@ from pyvisonic.py_utils import f4_crc16
 ])
 def test_panel_checksum_vectors(body, normal, alternate):
     calculator = MyChecksumCalc()
-    assert calculator._calculateCRC(bytearray.fromhex(body)) == bytes.fromhex(normal)
-    assert calculator._calculateCRCAlt(bytearray.fromhex(body)) == bytes.fromhex(alternate)
+    assert calculator._calculate_crc(bytearray.fromhex(body)) == bytes.fromhex(normal)
+    assert calculator._calculate_crc_alt(bytearray.fromhex(body)) == bytes.fromhex(alternate)
 
 
 @pytest.mark.parametrize('packet', ['0d 02 fd 0a', '0d 02 fe 0a', '0d 02 fc 0a'])
 def test_supported_panel_checksum_variants(packet):
-    assert MyChecksumCalc()._validatePDU(ChecksumType.NORMAL, bytearray.fromhex(packet))
+    assert MyChecksumCalc()._validate_pdu(ChecksumType.NORMAL, bytearray.fromhex(packet))
 
 
 @pytest.mark.parametrize('packet', ['', '0d', '0d 02', '0d 02 fd',
                                      '00 02 fd 0a', '0d 02 fd 00', '0d 02 80 0a'])
 def test_rejects_invalid_panel_packets(packet):
-    assert not MyChecksumCalc()._validatePDU(ChecksumType.NORMAL, bytearray.fromhex(packet))
+    assert not MyChecksumCalc()._validate_pdu(ChecksumType.NORMAL, bytearray.fromhex(packet))
 
 
 def test_crc16_standard_check_vector_and_wire_byte_order():
@@ -38,10 +38,10 @@ def test_captured_f4_ack_and_corruption():
     # Constant panel ACK documented in py_types_receiving.py.
     packet = bytearray.fromhex('0d f4 01 00 00 00 e4 c0 0a')
     calculator = MyChecksumCalc()
-    assert calculator._validatePDU(ChecksumType.IMAGE_DATA, packet)
+    assert calculator._validate_pdu(ChecksumType.IMAGE_DATA, packet)
     packet[3] ^= 0x01
-    assert not calculator._validatePDU(ChecksumType.IMAGE_DATA, packet)
+    assert not calculator._validate_pdu(ChecksumType.IMAGE_DATA, packet)
     # Image payloads intentionally bypass CRC, but framing still matters.
-    assert calculator._validatePDU(ChecksumType.IGNORE, packet)
+    assert calculator._validate_pdu(ChecksumType.IGNORE, packet)
     packet[-1] = 0
-    assert not calculator._validatePDU(ChecksumType.IGNORE, packet)
+    assert not calculator._validate_pdu(ChecksumType.IGNORE, packet)

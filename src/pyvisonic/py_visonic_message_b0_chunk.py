@@ -1,10 +1,9 @@
 """Process the B0 message chunk."""
 
-# ruff: noqa: G004, C901
 
 import asyncio
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from textwrap import wrap
 from typing import Any
 
@@ -34,7 +33,7 @@ from .py_sensor_types import (
 )
 from .py_types_receiving import Chunky, pmPanelSettingsB0_35, pmPanelSettingsB0_42
 from .py_types_sending import pmSendMsgB0_reverseLookup
-from .py_utils import b2i, get_local_time, get_utc_time, hexify, toString
+from .py_utils import b2i, get_local_time, get_utc_time, hexify, to_string
 from .py_visonic_message_base import MessageHandlingBase
 from .py_visonic_sequencer import INVESTIGATION_MATCH
 
@@ -103,6 +102,9 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 names = wrap(data.decode("ascii", errors="ignore"), data_item_size)
                 return [ name.replace("\x00", "").rstrip(" ") for name in names if name.replace("\x00", "").rstrip(" ") != "" ]
 
+            case _:
+                pass
+
         return data.hex(" ")
 
     def _extract_35_data(self, ch: Chunky) -> None:
@@ -118,41 +120,41 @@ class MessageHandlingB0Data(MessageHandlingBase):
         dat = self._settings_data_type_formatter(datatype, data)
 
         if not OBFUS:
-            log.debug(f"[_extract_35_data]           data_content={hex(data_content)} panel setting   { DataType(datatype) }  {datalen=}    data={toString(data)}")
+            log.debug(f"[_extract_35_data]           data_content={hex(data_content)} panel setting   { DataType(datatype) }  {datalen=}    data={to_string(data)}")
             log.debug(f"[_extract_35_data]               dat type = {type(dat)}   dat = {dat}")
 
         processed_data = False
 
         building = False
-        if dat is not None and (d := pmPanelSettingsB0_35.get(data_content)) is not None:
-            if d.processinstandard or not self.ForceStandardMode: #  self.PanelMode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
+        if (d := pmPanelSettingsB0_35.get(data_content)) is not None:
+            if d.processinstandard or not self.force_standard_mode: #  self.panel_mode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
                 if d.length in (0, d.length) and datatype == d.datatype:
                     # Check the PanelSettings to see if there's one that refers to this data_content
                     for key, value in pmPanelSettingCodes.items():
-                        if value.PMasterB035Panel == data_content:
+                        if value.p_master_b035_panel == data_content:
                             log.debug(f"[_extract_35_data]          Matched it {key=}")
                             processed_data = True
-                            if d.sequence is not None and isinstance(d.sequence, list): # We have a list of sequence identifiers e.g. [1,2,255]
+                            if d.sequence is not None: # We have a list of sequence identifiers e.g. [1,2,255]
                                 # TODO: We should really check to make sure that we get all messages in the list but not yet
                                 # I'm assuming that 0x35 messages (and 0x42 maybe) are the only messages with sequences
                                 if ch.datasize == RAW.BYTE.value and datatype == DataType.SPACE_PADDED_STRING_LIST:
-                                    if key not in self.builderData:
-                                        self.builderData[key] = []                    # empty the data list to concatenate the sequenced message data
-                                        self.builderMessage[key] = d.sequence         # get the list of sequences there needs to be to complete the data
-                                    if ch.sequence in self.builderMessage[key]:
-                                        self.builderData[key].extend(dat)             # Add actual data to the end of the list, we assume that the panel sends the data in order and we don't need to check the order
-                                        self.builderMessage[key].remove(ch.sequence)  # Got this sequence data so remove from the list
+                                    if key not in self.builder_data:
+                                        self.builder_data[key] = []                    # empty the data list to concatenate the sequenced message data
+                                        self.builder_message[key] = d.sequence         # get the list of sequences there needs to be to complete the data
+                                    if ch.sequence in self.builder_message[key]:
+                                        self.builder_data[key].extend(dat)             # Add actual data to the end of the list, we assume that the panel sends the data in order and we don't need to check the order
+                                        self.builder_message[key].remove(ch.sequence)  # Got this sequence data so remove from the list
                                     else:
                                         log.debug(f"[_extract_35_data]                        building {key}   Unexpected data sequence {ch.sequence} or sequence sent more than once")
                                     if ch.sequence == 255:
-                                        if len(self.builderMessage[key]) > 0:
+                                        if len(self.builder_message[key]) > 0:
                                             # Received the sequence end but we are missing some of the sequence
-                                            log.debug(f"[_extract_35_data]                        building {key}   We have the sequence terminator message but we still have missing sequenced messages {self.builderMessage[key]}.  Dumping all message data and not using it")
+                                            log.debug(f"[_extract_35_data]                        building {key}   We have the sequence terminator message but we still have missing sequenced messages {self.builder_message[key]}.  Dumping all message data and not using it")
                                         else:
                                             # copy across to use it
-                                            self.panel_settings[key].data = self.builderData[key]
+                                            self.panel_settings[key].data = self.builder_data[key]
                                     if d.display:
-                                        log.debug(f"[_extract_35_data]                        building {key}   {self.builderData[key]}")
+                                        log.debug(f"[_extract_35_data]                        building {key}   {self.builder_data[key]}")
                                     building = ch.sequence != 255
                             else:
                                 self._update_panel_setting(key = key, length = ch.length, datasize = ch.datasize, data = data, display = d.display, msg = d.msg)
@@ -162,36 +164,36 @@ class MessageHandlingB0Data(MessageHandlingBase):
             else:
                 log.debug(f"[_extract_35_data]               {d.msg} not processed as this specifically prevented in standard mode")
         else:
-            log.debug(f"[_extract_35_data]               data_content={hex(data_content)} panel setting unknown      {datatype=}  {datalen=}    data={toString(ch.data[3:])}")
+            log.debug(f"[_extract_35_data]               data_content={hex(data_content)} panel setting unknown      {datatype=}  {datalen=}    data={to_string(ch.data[3:])}")
 
         if not building:
             # remove it from the dictionary
-            self.builderMessage = {}
-            self.builderData = {}
+            self.builder_message = {}
+            self.builder_data = {}
 
         if data_content == 0x000F and datalen == 2 and isinstance(dat,str):
             processed_data = True
-            if not self.DownloadCodeUserSet and len(dat) == 4:
-                self.DownloadCode = dat
-                self.DownloadCodeUserSet = True    # Set to True as the download code has been obtained directly from the panel so it mist be correct
-                self.panel_settings[PanelSetting.PanelDownload].data = self.DownloadCode
-                log.debug(f"[_extract_35_data]               Setting Download Code : {self.DownloadCode}")
+            if not self.download_code_user_set and len(dat) == 4:
+                self.download_code = dat
+                self.download_code_user_set = True    # Set to True as the download code has been obtained directly from the panel so it mist be correct
+                self.panel_settings[PanelSetting.PanelDownload].data = self.download_code
+                log.debug(f"[_extract_35_data]               Setting Download Code : {self.download_code}")
 
         elif data_content == 0x003C and datalen == 15 and isinstance(dat,str): # 8 is a string
             processed_data = True
-            if not self.pmGotPanelDetails:
+            if not self.pm_got_panel_details:
                 name = dat.replace("-"," ")
                 log.debug(f"[_extract_35_data] Panel Name {name}.  Not got panel details so trying to reconcile:")
                 for p,v in pmPanelType.items():
                     log.debug(f"[_extract_35_data]     Checking: {p} {v}")
                     if name == v:
                         log.debug(f"[_extract_35_data] Fount it: {v}")
-                        self.ModelType = 0xDA7E  # No idea what model type it is so just set it to a valid number, DAVE
-                        if not self._set_data_from_panel_type(p, self.pmForceDownloadByEPROM):
+                        self.model_type = 0xDA7E  # No idea what model type it is so just set it to a valid number, DAVE
+                        if not self._set_data_from_panel_type(p, self.pm_force_download_by_eprom):
                             log.debug(f"[_extract_35_data] Panel Type {data[5]} Unknown")
                         else:
-                            log.debug(f"[_extract_35_data] PanelType={self.PanelType} : {self.PanelModel} , Model={hexify(self.ModelType)}   Powermaster {self.PowerMaster}")
-                            self.pmGotPanelDetails = True
+                            log.debug(f"[_extract_35_data] PanelType={self.panel_type} : {self.panel_model} , Model={hexify(self.model_type)}   Powermaster {self.power_master}")
+                            self.pm_got_panel_details = True
                         break
             else:
                 log.debug("[_extract_35_data] Not Processed as already got Panel Details")
@@ -204,7 +206,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 log.debug(f"[_extract_35_data] Seems to indicate that partitions are enabled in the panel, but nothing done with this data, dat={dat}")
             self.panel_settings[PanelSetting.PartitionEnabled].data = dat not in [0,255]   # this just stops it being mandatory again, it is not used
 
-        if not processed_data and dat is not None:
+        if not processed_data:
 #            if not OBFUS:
             log.debug(f"[_extract_35_data]               NOT PROCESSED dat = {dat}")
         log.debug("[_extract_35_data]     ***************************** Panel Settings Exit ***************************")
@@ -252,13 +254,13 @@ class MessageHandlingB0Data(MessageHandlingBase):
 
         processed_data = False
 
-        if dat is not None and (d := pmPanelSettingsB0_42.get(data_content)) is not None:
+        if (d := pmPanelSettingsB0_42.get(data_content)) is not None:
             #log.debug(f"[_extract_42_data]                  DataContent {d=}")
-            if d.processinstandard or not self.ForceStandardMode: #  self.PanelMode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
+            if d.processinstandard or not self.force_standard_mode: #  self.panel_mode in [AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED]:
                 if d.length in (0, d.length) and datatype == d.datatype:
                     # Check the PanelSettings to see if there's one that refers to this data_content
                     for key, value in pmPanelSettingCodes.items():
-                        if value.PMasterB042Panel == data_content:
+                        if value.p_master_b042_panel == data_content:
                             log.debug(f"[_extract_42_data]          Matched it {key=}")
                             processed_data = True
                             if ch.datasize == RAW.BYTE.value and datatype == DataType.SPACE_PADDED_STRING_LIST:
@@ -279,30 +281,30 @@ class MessageHandlingB0Data(MessageHandlingBase):
             else:
                 log.debug(f"[_extract_42_data]               {d.msg} not processed as this specifically prevented in standard mode")
         else:
-            log.debug(f"[_extract_42_data]               data_content={hex(data_content)} panel setting unknown      {datatype=}  data={toString(ch.data)}")
+            log.debug(f"[_extract_42_data]               data_content={hex(data_content)} panel setting unknown      {datatype=}  data={to_string(ch.data)}")
 
         if data_content == 0x000F and data_item_size == 2 and isinstance(dat,str) and len(dat) == 4:
             processed_data = True
-            if not self.DownloadCodeUserSet and len(dat) == 4:
-                self.DownloadCode = dat
-                self.DownloadCodeUserSet = True    # Set to True as the download code has been obtained directly from the panel so it mist be correct
-                self.panel_settings[PanelSetting.PanelDownload].data = self.DownloadCode
-                log.debug(f"[_extract_42_data]               Setting Download Code : {self.DownloadCode}")
+            if not self.download_code_user_set and len(dat) == 4:
+                self.download_code = dat
+                self.download_code_user_set = True    # Set to True as the download code has been obtained directly from the panel so it mist be correct
+                self.panel_settings[PanelSetting.PanelDownload].data = self.download_code
+                log.debug(f"[_extract_42_data]               Setting Download Code : {self.download_code}")
 
         elif data_content == 0x003C and data_item_size == 15 and max_data_items == 1 and no_of_entries == 1 and isinstance(dat,str):
             processed_data = True
             name = dat.replace("-"," ")
             self.panel_settings[PanelSetting.PanelName].data = name
-            if not self.pmGotPanelDetails:
+            if not self.pm_got_panel_details:
                 log.debug(f"[_extract_42_data] Panel Name {name}.  Not got panel details so trying to reconcile:")
                 for p,v in pmPanelType.items():
                     log.debug(f"[_extract_42_data]     Checking: {p} {v}")
                     if name.lower() == v.lower():
                         log.debug(f"[_extract_42_data] Fount it: {v}")
-                        self.ModelType = 0xDA7E  # No idea what model type it is so just set it to a valid number, DAVE
-                        if self._set_data_from_panel_type(p, self.pmForceDownloadByEPROM):
-                            log.debug(f"[_extract_42_data] PanelType={self.PanelType} : {self.PanelModel} , Model={hexify(self.ModelType)}   Powermaster {self.PowerMaster}")
-                            self.pmGotPanelDetails = True
+                        self.model_type = 0xDA7E  # No idea what model type it is so just set it to a valid number, DAVE
+                        if self._set_data_from_panel_type(p, self.pm_force_download_by_eprom):
+                            log.debug(f"[_extract_42_data] PanelType={self.panel_type} : {self.panel_model} , Model={hexify(self.model_type)}   Powermaster {self.power_master}")
+                            self.pm_got_panel_details = True
                         else:
                             log.debug(f"[_extract_42_data] Panel Type {ch.data[5]} Unknown")
                         break
@@ -320,36 +322,36 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 log.debug(f"[_extract_42_data]          Seems to indicate that partitions are enabled in the panel {dat}")
             self.panel_settings[PanelSetting.PartitionEnabled].data = dat not in [0,255]   # this just stops it being mandatory again, it is not used
 
-        if not processed_data and dat is not None:
+        if not processed_data:
 #            if not OBFUS:
             log.debug(f"[_extract_42_data]               NOT PROCESSED dat = {dat}")
 
-    def _decode_24(self, partitionCount : int, dateData: bytearray, unknownData : bytearray, partitionData : bytearray) -> None:
+    def _decode_24(self, partition_count : int, date_data: bytearray, unknown_data : bytearray, partition_data : bytearray) -> None:
 
-        i_sec = dateData[0]
-        i_min = dateData[1]
-        i_hour = dateData[2]
-        i_day = dateData[3]
-        i_month = dateData[4]
-        i_year = dateData[5]
+        i_sec = date_data[0]
+        i_min = date_data[1]
+        i_hour = date_data[2]
+        i_day = date_data[3]
+        i_month = date_data[4]
+        i_year = date_data[5]
 
         # Attempt to check and correct time
         pt = datetime(2000 + i_year, i_month, i_day, i_hour, i_min, i_sec).astimezone()
         self._set_time_in_panel(pt)
         messagedate = f"{i_day:0>2}/{i_month:0>2}/{i_year}   {i_hour:0>2}:{i_min:0>2}:{i_sec:0>2}"
 
-        unknown1 = unknownData[0]
-        unknown2 = unknownData[1]
-        self._check_unknown("[handle_msgtypeB0]              Decode 24 Message unknownData is different to last time", "handle_msgtypeB0_24", toString(unknownData))
+        unknown1 = unknown_data[0]
+        unknown2 = unknown_data[1]
+        self._check_unknown("[handle_msgtypeB0]              Decode 24 Message unknownData is different to last time", "handle_msgtypeB0_24", to_string(unknown_data))
 
-        log.debug(f"[_decode_24]    Panel time is {pt}  date={messagedate}    data (hex) 14={hex(unknown1)}  15={hex(unknown2)}  PartitionCount={partitionCount}")
+        log.debug(f"[_decode_24]    Panel time is {pt}  date={messagedate}    data (hex) 14={hex(unknown1)}  15={hex(unknown2)}  PartitionCount={partition_count}")
 
-        for i in range(partitionCount):
+        for i in range(partition_count):
             offset = i * 4
             # Repeat 4 bytes (17 to 20) for more than 1 partition, assume 19 and 20 are zone data
-            self._updatePartitionStatus(i, partitionData[offset], partitionData[offset + 1], partitionData[offset + 2], partitionData[offset + 3])
+            self._update_partition_status(i, partition_data[offset], partition_data[offset + 1], partition_data[offset + 2], partition_data[offset + 3])
 
-    def _decode_4B(self, sensor_identifier: int, data: bytearray) -> None:
+    def _decode_4b(self, sensor_identifier: int, data: bytearray) -> None:
         # Get local time
         t = get_local_time()
         # create an integer from the B0 data, this is the number of seconds since the epoch (00:00 on 1st Jan 1970)
@@ -363,17 +365,17 @@ class MessageHandlingB0Data(MessageHandlingBase):
         # 02 - Closed (need to check timestamp)
         # 03 - Motion (need to check timestamp)
         # 04 - CheckedIn?  As in device checked in.
-        if sensor_identifier in self.SensorList:
-            sensor = self.SensorList[sensor_identifier]
+        if sensor_identifier in self.sensor_list:
+            sensor = self.sensor_list[sensor_identifier]
             if code in [0,4]:
                 sensor.status_log = trigger
             elif code in [1,2,3]:
                 triggered = False
-                if self.Panel_Integration_Time_Difference is not None:  # Can only be True if AB messages are processed, therefore Std+ or Powerlink
+                if self.panel_integration_time_difference is not None:  # Can only be True if AB messages are processed, therefore Std+ or Powerlink
                     tolerance = 4 # seconds
-                    panel_time = t + self.Panel_Integration_Time_Difference
+                    panel_time = t + self.panel_integration_time_difference
                     diff = abs((trigger - panel_time).total_seconds())
-                    log.debug(f"[_decode_4B]           Sensor Updated = {sensor.id:>2}  timenow = {t}  self.Panel_Integration_Time_Difference {self.Panel_Integration_Time_Difference.total_seconds()}    diff {diff}     panel_time {panel_time}     trigger {trigger}")
+                    log.debug(f"[_decode_4B]           Sensor Updated = {sensor.id:>2}  timenow = {t}  self.Panel_Integration_Time_Difference {self.panel_integration_time_difference.total_seconds()}    diff {diff}     panel_time {panel_time}     trigger {trigger}")
                     triggered = diff <= tolerance
 
                 else:
@@ -398,18 +400,19 @@ class MessageHandlingB0Data(MessageHandlingBase):
             else:
                 log.debug(f"[_decode_4B]           Abnormal: Sensor {sensor.id:>2} Not Updated as sensor code {code} not known")
 
-    def _process_B0_log_entry(self, total: int, current: int, data: bytearray) -> None:
+    def _process_b0_log_entry(self, total: int, current: int, data: bytearray) -> None:
         # PM10
         #    -- time ---          Ev Pt               Pt = Partition I think.  Partition 0 is System or the Panel itself.
         #    3f 71 02 67 03 00 00 5c 00 04            data[4] seems to always be 03, 06 or 0C.  device type - 0c - panel, 09 - plink, 03 - zones
         #    69 3a 01 67 0c 00 00 1c 00 53            data[5] if device type is zones, this is the zero based zone id
         #    69 3a 01 67 06 00 00 1b 01 52
 
-        if self.onPanelLogHandler is not None:
+        if self.on_panel_log_handler is not None:
             # There's no point in doing all of this if there's no handler to send it to!
             # extract the time as "epoch time" and convert to normal time
             hs = b2i(data[0:4])
-            pmtime = datetime.fromtimestamp(hs)
+            # Preserve the panel's recorded local wall-clock time without a timezone.
+            pmtime = datetime.fromtimestamp(hs)  # noqa: DTZ006, RUF100
             #log.debug(f"[handle_msgtypeA0]   Powermaster time {hs} as hex {hex(hs)} from epoch is {pmtime}")
             device_type = data[4]
             event_zone = 0
@@ -418,8 +421,8 @@ class MessageHandlingB0Data(MessageHandlingBase):
 
             partition = data[8]
             # Send the event log in to HA
-            #     Do not use timezone times as it was the log created on that day at that time
-            self.onPanelLogHandler(total = total, current = current, partition = partition, dateandtime = pmtime, zone = event_zone, event = data[7])
+            # Preserve the panel's recorded local wall-clock time without a timezone.
+            self.on_panel_log_handler(total = total, current = current, partition = partition, dateandtime = pmtime, zone = event_zone, event = data[7])
 
     def enrol_device(self, ch : Chunky, index: IndexName) -> None:
         """Enrol a device in the HA system."""
@@ -428,20 +431,20 @@ class MessageHandlingB0Data(MessageHandlingBase):
         psn: PanelStatusNames = Mappy_PanelStatusNames[index]
         cfg: CFG = Mappy_CFG[index]
         enrolled = b2i(ch.data)
-        ptsize = pmPanelConfig[cfg][self.PanelType]
+        ptsize = pmPanelConfig[cfg][self.panel_type]
         count = min(ch.length * 8, ptsize if isinstance(ptsize, int) else 1000000)
-        self.PanelStatus[psn] = self._string_from_raw_bits(enrolled, count, f"[_process_chunk] Found an Enrolled PowerMaster {index.name}")
+        self.panel_status[psn] = self._string_from_raw_bits(enrolled, count, f"[_process_chunk] Found an Enrolled PowerMaster {index.name}")
         if enrolled == 0:
             return
         # CREATE index for the device
         for i in range(count):
             f = enrolled & (1 << i)
             device_id = AlGenericDevice.make_key(index, i)
-            if f != 0 and device_id not in self.DeviceList:
+            if f != 0 and device_id not in self.device_list:
                 log.info(f"[Process Settings]        {index} needs enrolling {device_id=}  {i=}")
-                if self.onNewDeviceHandler is not None:
-                    self.DeviceList[device_id] = AlGenericDevice(index, id=i+1, enabled=True)
-                    self.onNewDeviceHandler(True, self.DeviceList[device_id])
+                if self.on_new_device_handler is not None:
+                    self.device_list[device_id] = AlGenericDevice(index, id=i+1, enabled=True)
+                    self.on_new_device_handler(True, self.device_list[device_id])
 
     def update_device(self, ch: Chunky, func: VisonicFunctions, index: IndexName, message: str) -> None:
         """Update device."""
@@ -489,7 +492,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
         previous = self._investigation_message_log.get(key)
 
         if previous is None:
-            log.debug(f"[handle_msgtypeB0]              Initialising Investigation data {subtype.name} {index.name} {seq_type.name} {toString(current)}")
+            log.debug(f"[handle_msgtypeB0]              Initialising Investigation data {subtype.name} {index.name} {seq_type.name} {to_string(current)}")
 
         self._investigation_message_log[key] = current
 
@@ -511,21 +514,21 @@ class MessageHandlingB0Data(MessageHandlingBase):
 
         st = pmSendMsgB0_reverseLookup[ch.subtype].data if ch.subtype in pmSendMsgB0_reverseLookup else None
 
-        if self.beezero_024B_sensorcount is not None and st != B0SubType.ZONE_LAST_EVENT:
-            self.beezero_024B_sensorcount = None   # If theres a next time so they are coordinated
+        if self.beezero_024b_sensorcount is not None and st != B0SubType.ZONE_LAST_EVENT:
+            self.beezero_024b_sensorcount = None   # If theres a next time so they are coordinated
             log.debug(f"[handle_msgtypeB0]        Resetting beezero_024B_sensorcount st=<{st}>")
 
         if st is None:
-            log.debug(f"[handle_msgtypeB0]     {notknown} chunk={ch.GetItAll()}")
+            log.debug(f"[handle_msgtypeB0]     {notknown} chunk={ch.get_it_all()}")
             return
 
         ind = IndexName(ch.index) if ch.index in IndexName else IndexName.UNDEFINED
         datasize = RAW(ch.datasize) if ch.datasize in RAW else RAW.UNDEFINED
         seq_type = SEQUENCE(ch.msg_type) if ch.msg_type in SEQUENCE else SEQUENCE.UNDEFINED
 
-        #log.debug(f"[handle_msgtypeB0]     st = {st}      chunky = {ch}      self.beezero_024B_sensorcount = {self.beezero_024B_sensorcount}") # [_process_chunk]                 chunky = sequence 255  datasize 40  index 3   length 140
+        #log.debug(f"[handle_msgtypeB0]     st = {st}      chunky = {ch}      self.beezero_024b_sensorcount = {self.beezero_024b_sensorcount}") # [_process_chunk]                 chunky = sequence 255  datasize 40  index 3   length 140
         if datasize == RAW.UNDEFINED:
-            log.debug(f"[handle_msgtypeB0]     {notknown} - datasize is undefined, chunk={ch.GetItAll()}")
+            log.debug(f"[handle_msgtypeB0]     {notknown} - datasize is undefined, chunk={ch.get_it_all()}")
 
         if st in INVESTIGATION_MATCH:
             # Putting this in the match became longer than this, and it keeps it seperate
@@ -535,12 +538,12 @@ class MessageHandlingB0Data(MessageHandlingBase):
             log.debug("[handle_msgtypeB0]              It's new data to be processed")
             for i, value in lst:
                 device_id = AlGenericDevice.make_key(ind, i)
-                if ind == IndexName.ZONE and i in self.SensorList:
-                    self.SensorList[i].set_investigation_message(f"Visonic {st.name} set to {value} for zone {i}")
-                    self.SensorList[i].notify(AlSensorCondition.INVESTIGATION)
-                elif device_id in self.DeviceList:
-                    self.DeviceList[device_id].set_investigation_message(f"Visonic {st.name} set to {value} for {device_id=}")
-                    self.DeviceList[device_id].notify()
+                if ind == IndexName.ZONE and i in self.sensor_list:
+                    self.sensor_list[i].set_investigation_message(f"Visonic {st.name} set to {value} for zone {i}")
+                    self.sensor_list[i].notify(AlSensorCondition.INVESTIGATION)
+                elif device_id in self.device_list:
+                    self.device_list[device_id].set_investigation_message(f"Visonic {st.name} set to {value} for {device_id=}")
+                    self.device_list[device_id].notify()
             return
 
         match (st, datasize, ind, ch.length):
@@ -560,7 +563,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 # Panel state change, added just in case the panel abbreviates this message
                 # 06 00 00 00 02 00 00 00 29 0b 10 08 0b 18 14 06 00 85 00 00
                 #_decode_24(ch.data, 8, 14, 1, 17)
-                #self.B0_LastPanelStateTime = get_utc_time()
+                #self.b0_last_panel_state_time = get_utc_time()
                 log.debug(f"[handle_msgtypeB0]              {notknown} Got a short Panel State Message but not processing it ch={ch}")
 
             case (B0SubType.PANEL_STATE_1,      RAW.BYTE, IndexName.MIXED,  21):
@@ -569,10 +572,10 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 if ch.data[16] == 1:   # partition count set to 1
                     # We already know that the length of the ch.data is 21 so no need to check it
                     self._decode_24(1, ch.data[8:14], ch.data[14:16], ch.data[17:21])
-                    self.B0_LastPanelStateTime = get_utc_time()
+                    self.b0_last_panel_state_time = get_utc_time()
                 else:
                     log.debug(f"[handle_msgtypeB0]              {notknown} Got a normal Panel State Message but not processing it because the partition count in the message is not 1 ch={ch}")
-                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_21", toString(ch.data[0:8]))
+                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_21", to_string(ch.data[0:8]))
 
             case (B0SubType.PANEL_STATE_1,      RAW.BYTE, IndexName.MIXED, 28):
                 # Panel state change, no idea what bytes 0 to 7 mean. - the user that has the panel that sends this uses all 3 partitions
@@ -580,12 +583,12 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 if self.get_partitions_in_use() is not None:              # we have a 24 message that has extended data (for the partitions) and the panel has reported it has partitions in use
                     # We already know that the length of the ch.data is 28 so no need to check it
                     self._decode_24(3, ch.data[8:14], ch.data[14:16], ch.data[16:28])
-                    self.B0_LastPanelStateTime = get_utc_time()
+                    self.b0_last_panel_state_time = get_utc_time()
                 else:
                     log.debug(f"[handle_msgtypeB0]              {notknown} Got a long Panel State Message but the partition count is 1, processing it anyway ch={ch}")
                     self._decode_24(3, ch.data[8:14], ch.data[14:16], ch.data[16:28])
-                    self.B0_LastPanelStateTime = get_utc_time()
-                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_28", toString(ch.data[0:8]))
+                    self.b0_last_panel_state_time = get_utc_time()
+                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_28", to_string(ch.data[0:8]))
 
             case (B0SubType.PANEL_STATE_1,      RAW.BYTE, IndexName.MIXED,  29):
                 # Panel state change, no idea what bytes 0 to 7 mean.
@@ -593,12 +596,12 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 if self.get_partitions_in_use() is not None:              # we have a 24 message that has extended data (for the partitions) and the panel has reported it has partitions in use
                     # We already know that the length of the ch.data is 29 so no need to check it
                     self._decode_24(ch.data[16], ch.data[8:14], ch.data[14:16], ch.data[17:29])
-                    self.B0_LastPanelStateTime = get_utc_time()
+                    self.b0_last_panel_state_time = get_utc_time()
                 else:
                     log.debug(f"[handle_msgtypeB0]              {notknown} Got a really long Panel State Message but the partition count is 1, processing it anyway ch={ch}")
                     self._decode_24(ch.data[16], ch.data[8:14], ch.data[14:16], ch.data[17:29])
-                    self.B0_LastPanelStateTime = get_utc_time()
-                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_29", toString(ch.data[0:8]))
+                    self.b0_last_panel_state_time = get_utc_time()
+                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_29", to_string(ch.data[0:8]))
 
             case (B0SubType.PANEL_STATE_3,      RAW.FIVE_BYTE, IndexName.MIXED, 6 ):
                 # e.g. 0c 00 00 03 10 14    ==>   stype.name='PANIC_PANEL'  partition=3  zone=1
@@ -625,13 +628,13 @@ class MessageHandlingB0Data(MessageHandlingBase):
                     #if ptu is not None:
                     #    for p in partition:    # already in 0 to X range
                     #        if p+1 in list(ptu) and ch.data[4] in panicmap:
-                    #            self.PartitionState[p].UpdatePanelState(panicmap[ch.data[4]], None)
+                    #            self.partition_state[p].update_panel_state(panicmap[ch.data[4]], None)
                     if ptu is not None:
                         if ch.data[4] in panicmap:
                             for p in ptu:
-                                self.PartitionState[p-1].UpdatePanelState(panicmap[ch.data[4]])
+                                self.partition_state[p-1].update_panel_state(panicmap[ch.data[4]])
                     elif ch.data[4] in panicmap:
-                        self.PartitionState[0].UpdatePanelState(panicmap[ch.data[4]])
+                        self.partition_state[0].update_panel_state(panicmap[ch.data[4]])
 
                 # e.g. 03 36 00 03 05 a4
                 # 2025-08-04 12:36:54.889 DEBUG (MainThread) [custom_components.visonic.pyvisonic] [handle_msgtypeB0]             stype.name='ALARM_DELAY'   partition=[0, 1]  sensor=54     self.get_partitions_in_use()={1, 2}
@@ -643,35 +646,35 @@ class MessageHandlingB0Data(MessageHandlingBase):
                     if ch.length % ds == 0:  # If it's exactly divisible
                         b = ch.length // ds
                         for i in range(b):
-                            log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}   MIXED     Block {i:<3}   {toString(ch.data[i*ds:(i+1)*ds])}")
+                            log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}   MIXED     Block {i:<3}   {to_string(ch.data[i*ds:(i+1)*ds])}")
                 if b < 0:
-                    log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}  MIXED   data = {toString(ch.data)}")
-                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_4 is different to last time", "handle_msgtypeB0_PANEL_STATE_4", toString(ch.data))
+                    log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}  MIXED   data = {to_string(ch.data)}")
+                self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_4 is different to last time", "handle_msgtypeB0_PANEL_STATE_4", to_string(ch.data))
 
             case (B0SubType.SYSTEM_CAP,         RAW.WORD, IndexName.MIXED, _ ):
                 # System capabilities
                 ds = 2 # each entry is 2 words
                 b = ch.length // ds
                 # Set / Update panel capabilities
-                self.PanelCapabilities : dict[IndexName,int]= {}
+                self.panel_capabilities : dict[IndexName,int]= {}
                 for i in range(b):
                     d = ch.data[(i*ds)+1] * 256 + ch.data[i*ds]
                     t = IndexName(i).name if i in IndexName else f'Type {i}'
-                    log.debug(f"[handle_msgtypeB0]              Got {st.name:<20}   {t:<16}   {toString(ch.data[i*ds:(i+1)*ds])}    decimal {d:>4}")
+                    log.debug(f"[handle_msgtypeB0]              Got {st.name:<20}   {t:<16}   {to_string(ch.data[i*ds:(i+1)*ds])}    decimal {d:>4}")
                     if i in IndexName:
                         if IndexName(i) == IndexName.ZONE:
-                            pt1 = pmPanelConfig[CFG.WIRELESS][self.PanelType]
-                            pt2 = pmPanelConfig[CFG.WIRED][self.PanelType]
+                            pt1 = pmPanelConfig[CFG.WIRELESS][self.panel_type]
+                            pt2 = pmPanelConfig[CFG.WIRED][self.panel_type]
                             if isinstance(pt1, int) and isinstance(pt2, int):
-                                self.PanelCapabilities[IndexName.ZONE] = pt1 + pt2
-                            #if self.PanelCapabilities[IndexName.ZONE] != d:
-                            #    log.debug(f"[handle_msgtypeB0]                  Not updating ZONES as it may be wrong, reverting back to default value for panel {self.PanelCapabilities[IndexName.ZONE]}")
+                                self.panel_capabilities[IndexName.ZONE] = pt1 + pt2
+                            #if self.panel_capabilities[IndexName.ZONE] != d:
+                            #    log.debug(f"[handle_msgtypeB0]                  Not updating ZONES as it may be wrong, reverting back to default value for panel {self.panel_capabilities[IndexName.ZONE]}")
                         else:
-                            self.PanelCapabilities[IndexName(i)] = d
+                            self.panel_capabilities[IndexName(i)] = d
                             # make sure any mandatory capabilities are recorded as complete
                             if IndexName(i) == IndexName.PGM:
                                 self.panel_settings[PanelSetting.HasPGM].data = bool(d >= 1)
-                log.debug(f"[handle_msgtypeB0]             Panel Capabilities = {self.PanelCapabilities}")
+                log.debug(f"[handle_msgtypeB0]             Panel Capabilities = {self.panel_capabilities}")
 
             case (B0SubType.TRIGGERED_ZONE,     RAW.BITS, IndexName.ZONE, _ ):
                 zone_len = ch.length * 8     # 8 bits in a byte
@@ -689,22 +692,22 @@ class MessageHandlingB0Data(MessageHandlingBase):
                     ptu = self.get_partitions_in_use()
                     for dev in device_triggers:
                         # go through list of sensors that triggered
-                        if dev in self.SensorList:
-                            wibble = self.SensorList[dev].zone_type
+                        if dev in self.sensor_list:
+                            wibble = self.sensor_list[dev].zone_type
                             if isinstance(wibble, int):
                                 _name, ev = pmMapZoneType.get(wibble, ZoneEventCodesType(f"undefined {wibble}", EventType.NONE))
                                 if ptu is not None:
                                     # partitions in use
                                         # Get the partitions that this sensor belongs to
                                         #     Remember that dev is the sensor, the zone is sensor+1
-                                    part = self.SensorList[dev].partition
+                                    part = self.sensor_list[dev].partition
                                     for p in part:
                                         log.debug(f"[handle_msgtypeB0]             Zone {dev+1}  partition,{p=}    {ev.name=}")
-                                        self.PartitionState[p-1].UpdatePanelState(ev, self.SensorList[dev])
+                                        self.partition_state[p-1].update_panel_state(ev, self.sensor_list[dev])
                                 else:
                                     # partitions not in use
                                     log.debug(f"[handle_msgtypeB0]             Zone {dev+1}   {ev.name=}")
-                                    self.PartitionState[0].UpdatePanelState(ev, self.SensorList[dev])
+                                    self.partition_state[0].update_panel_state(ev, self.sensor_list[dev])
                             else:
                                 log.debug(f"[handle_msgtypeB0]               Device {dev}   Zone {dev+1}   in the current sensor list but {wibble} is not an integer")
                         else:
@@ -749,11 +752,11 @@ class MessageHandlingB0Data(MessageHandlingBase):
                     log.debug(f"[handle_msgtypeB0]          Got Assigned Partition, {notknown} Index unknown    chunk = {ch}")
 
             case (B0SubType.ASSIGNED_PARTITION, RAW.BYTE, _ , _ ):   # paged
-                log.debug(f"Partition Setting for {ind.name} {toString(ch.data)}")
+                log.debug(f"Partition Setting for {ind.name} {to_string(ch.data)}")
                 for i in range(ch.length):
                     device_id = AlGenericDevice.make_key(ind, i)
-                    if device_id in self.DeviceList:
-                        device: AlGenericDevice = self.DeviceList[device_id]
+                    if device_id in self.device_list:
+                        device: AlGenericDevice = self.device_list[device_id]
                         device.add_to_partition_bitwise(ch.data[i])
                         device.notify()
 
@@ -774,11 +777,11 @@ class MessageHandlingB0Data(MessageHandlingBase):
 
             case (B0SubType.DEVICE_TYPES,       RAW.BYTE, _ ,  _ ):
                 # I'm 100% sure this is correct although the actual model numbers may be wrong and are lacking details
-                log.debug(f"Device Types for {ind.name} {toString(ch.data)}")
+                log.debug(f"Device Types for {ind.name} {to_string(ch.data)}")
                 for i in range(ch.length):
                     device_id = AlGenericDevice.make_key(ind, i)
-                    if device_id in self.DeviceList:
-                        device_g: AlGenericDevice = self.DeviceList[device_id]
+                    if device_id in self.device_list:
+                        device_g: AlGenericDevice = self.device_list[device_id]
                         ky = ch.data[i]
                         match ind:
                             case IndexName.SIREN:
@@ -793,6 +796,8 @@ class MessageHandlingB0Data(MessageHandlingBase):
                             case IndexName.KEYPAD_ONE_WAY | IndexName.KEYPAD_TWO_WAY:
                                 device_g.model = pmKeypadMaster.get(ky) if ky in pmKeypadMaster else f"KeyPad {ky}"
                                 device_g.notify()
+                            case _:
+                                pass
 
             case (B0SubType.ZONE_NAMES,         RAW.BYTE, IndexName.ZONE,  _ ):
                 # I'm 100% sure this is correct
@@ -808,41 +813,41 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 zone_count = self._get_panel_capability(IndexName.ZONE)
                 if ch.length >= zone_count:
                     for i in range(zone_count):
-                        if i in self.SensorList and ch.data[i] != 255:
+                        if i in self.sensor_list and ch.data[i] != 255:
                             temp = (ch.data[i] / 2) - 40.5
                             log.debug(f"[handle_msgtypeB0]            Zone {i+1} has temperature raw value {ch.data[i]}     temp={temp}")
-                            self.SensorList[i].temperature = temp
+                            self.sensor_list[i].temperature = temp
 
             case (B0SubType.ZONE_LUX  ,         RAW.BYTE, IndexName.ZONE,  _ ):
                 #log.debug(f"[handle_msgtypeB0]          Got Zone Luminance Chunk {ch}")
-                #zone_count = pmPanelConfig[CFG.WIRELESS][self.PanelType] + pmPanelConfig[CFG.WIRED][self.PanelType]
+                #zone_count = pmPanelConfig[CFG.WIRELESS][self.panel_type] + pmPanelConfig[CFG.WIRED][self.panel_type]
                 zone_count = self._get_panel_capability(IndexName.ZONE)
                 if ch.length >= zone_count:
                     for i in range(zone_count):
-                        if i in self.SensorList and ch.data[i] != 255:
+                        if i in self.sensor_list and ch.data[i] != 255:
                             log.debug(f"[handle_msgtypeB0]               Zone {i+1} has luminance value {ch.data[i]} --> not sure what the value means")
-                            self.SensorList[i].lux = ch.data[i]
+                            self.sensor_list[i].lux = ch.data[i]
 
             case (B0SubType.ASK_ME_1,           RAW.BYTE, IndexName.MIXED,  _ ):
                 log.debug(f"[handle_msgtypeB0]          Received ASK_ME_1 pop message   {ch}")
-                if self.PanelMode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.STANDARD_PLUS, AlPanelMode.STANDARD]:
+                if self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.STANDARD_PLUS, AlPanelMode.STANDARD]:
                     if ch.length > 0:
-                        s = self._create_B0_Data_Request(taglist = set(ch.data))
+                        s = self._create_b0_data_request(taglist = set(ch.data))
                         self.add_message_to_send_queue(s, priority = MessagePriority.URGENT)
                     else:
-                        log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_1 chunk={ch.GetItAll()}")
+                        log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_1 chunk={ch.get_it_all()}")
 
             case (B0SubType.ASK_ME_2,           RAW.BYTE, IndexName.MIXED,  _ ):
                 log.debug(f"[handle_msgtypeB0]          Received ASK_ME_2 pop message   {ch}")
-                if self.PanelMode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.STANDARD_PLUS, AlPanelMode.STANDARD]:
+                if self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.STANDARD_PLUS, AlPanelMode.STANDARD]:
                     if ch.length > 0:
-                        s = self._create_B0_Data_Request(taglist = set(ch.data))
+                        s = self._create_b0_data_request(taglist = set(ch.data))
                         self.add_message_to_send_queue(s, priority = MessagePriority.URGENT)
                     else:
-                        #log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_2 chunk={ch.GetItAll()}   so asking for PANEL_STATE_1 and ZONE_LAST_EVENT")
-                        #s = self._create_B0_Data_Request(taglist = {pmSendMsgB0[B0SubType.PANEL_STATE_1].data, pmSendMsgB0[B0SubType.ZONE_LAST_EVENT].data} )
-                        log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_2 chunk={ch.GetItAll()}   so asking for PANEL_STATE_1")
-                        s = self._create_B0_Data_Request(taglist = B0SubType.PANEL_STATE_1 )
+                        #log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_2 chunk={ch.get_it_all()}   so asking for PANEL_STATE_1 and ZONE_LAST_EVENT")
+                        #s = self._create_b0_data_request(taglist = {pmSendMsgB0[B0SubType.PANEL_STATE_1].data, pmSendMsgB0[B0SubType.ZONE_LAST_EVENT].data} )
+                        log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_2 chunk={ch.get_it_all()}   so asking for PANEL_STATE_1")
+                        s = self._create_b0_data_request(taglist = B0SubType.PANEL_STATE_1 )
                         self.add_message_to_send_queue(s, priority = MessagePriority.URGENT)
 
             case (B0SubType.ZONE_LAST_EVENT,    RAW.FIVE_BYTE, IndexName.ZONE,  _ ):  # Each entry is ch.datasize=40 bits (or 5 bytes)
@@ -851,41 +856,41 @@ class MessageHandlingB0Data(MessageHandlingBase):
                     # PM10: I assume this does not get sent by the panel.
                     # PM30: This represents sensors Z01 to Z36.  Each sensor is 5 bytes.
                     #       For the PM30 with 64 sensors this comes out as 180 / 5 = 36
-                    #log.debug(f"[handle_msgtypeB0] ZONE_LAST_EVENT sub   self.beezero_024B_sensorcount = {self.beezero_024B_sensorcount}")
-                    if self.beezero_024B_sensorcount is None and ch.length % 5 == 0:             # Divisible by 5, each sensors data is 5 bytes
-                        self.beezero_024B_sensorcount = int(ch.length / 5)
-                        for i in range(self.beezero_024B_sensorcount):
+                    #log.debug(f"[handle_msgtypeB0] ZONE_LAST_EVENT sub   self.beezero_024b_sensorcount = {self.beezero_024b_sensorcount}")
+                    if self.beezero_024b_sensorcount is None and ch.length % 5 == 0:             # Divisible by 5, each sensors data is 5 bytes
+                        self.beezero_024b_sensorcount = int(ch.length / 5)
+                        for i in range(self.beezero_024b_sensorcount):
                             o = i * 5
-                            self._decode_4B(sensor_identifier = i, data = ch.data[o:o+5])
+                            self._decode_4b(sensor_identifier = i, data = ch.data[o:o+5])
                 elif seq_type == SEQUENCE.MAIN:
                     # Zone Last Event
                     # PM10: This represents sensors Z01 to Z30.
                     #       For the PM10 with 30 sensors this comes out as 150 / 5 = 30
                     # PM30: This represents sensors Z37 to Z64.  Each sensor is 5 bytes
                     #       For the PM30 with 64 sensors this comes out as 140 / 5 = 28     (64-36=28)
-                    #log.debug(f"[handle_msgtypeB0] ZONE_LAST_EVENT main   self.beezero_024B_sensorcount = {self.beezero_024B_sensorcount}")
+                    #log.debug(f"[handle_msgtypeB0] ZONE_LAST_EVENT main   self.beezero_024b_sensorcount = {self.beezero_024b_sensorcount}")
                     if ch.length % 5 == 0:         # Divisible by 5, each sensors data is 5 bytes
-                        if self.beezero_024B_sensorcount is not None:
+                        if self.beezero_024b_sensorcount is not None:
                             sensorcount = int(ch.length / 5)
                             for i in range(sensorcount):
                                 o = i * 5
-                                self._decode_4B(sensor_identifier = i + self.beezero_024B_sensorcount, data = ch.data[o:o+5])
+                                self._decode_4b(sensor_identifier = i + self.beezero_024b_sensorcount, data = ch.data[o:o+5])
                         else: # Assume PM10
                             # Assume that when the PowerMaster panel has less than 32 sensors then it just sends this and not msgType == 0x02, subType == pmSendMsgB0[B0SubType.ZONE_LAST_EVENT]
                             sensorcount = int(ch.length / 5)
                             for i in range(sensorcount):
                                 o = i * 5
-                                self._decode_4B(sensor_identifier = i, data = ch.data[o:o+5])
-                    self.beezero_024B_sensorcount = None   # If theres a next time so they are coordinated
+                                self._decode_4b(sensor_identifier = i, data = ch.data[o:o+5])
+                    self.beezero_024b_sensorcount = None   # If theres a next time so they are coordinated
 
             case (B0SubType.LEGACY_EVENT_LOG,   RAW.TEN_BYTE, IndexName.MIXED,  _ ):
                 log.debug(f"[handle_msgtypeB0]       Got Legacy Event Log Chunk {ch}")
-                self._process_B0_log_entry(1, 1, ch.data)
+                self._process_b0_log_entry(1, 1, ch.data)
 
             case (B0SubType.EVENT_LOG,          RAW.TEN_BYTE, IndexName.MIXED,  _ ):
                 if seq_type == SEQUENCE.SUB:
                     log.debug(f"[handle_msgtypeB0]          Got Sub Event Log Chunk {ch}")
-                    event_total = pmPanelConfig[CFG.EVENTS][self.PanelType]
+                    event_total = pmPanelConfig[CFG.EVENTS][self.panel_type]
                     assert isinstance(event_total, int)
                     # Got Event Log Chunk sequence 6  datasize 80  index 255   length 170    data 92 73 00 67 0c 00 00 1c 00 63 92 73 00 67 06 00 00 1b 01 62 92 73 00 67 06 00 00 55 01 61 83 73 00 67 03 00 00 01 01 6a 7c 73 00 67 06 00 00 52 01 60 64 72 00 67 0c 00 00 1c 00 5f 64 72 00 67 06 00 00 1b 01 5e 56 72 00 67 0c 00 00 20 00 5d 2d 70 00 67 0c 00 00 1c 00 5c 26 70 00 67 0c 00 00 23 00 5b 0f 6e 00 67 0c 00 00 1c 00 5a 0f 6e 00 67 06 00 00 1b 01 59 fd 6d 00 67 0c 00 00 0c 00 58 a6 69 00 67 0c 00 00 1c 00 57 a6 69 00 67 06 00 00 1b 01 56 8e 69 00 67 0c 00 00 0c 00 55 24 69 00 67 0c 00 00 1c 00 54
                     datalength = 10 # We know this as we check datasize to be 80 above       ch.datasize // 8 # 8 bits in a byte
@@ -894,20 +899,20 @@ class MessageHandlingB0Data(MessageHandlingBase):
                     if ch.length % datalength == 0:  # is the length divisible by datalength exactly
                         for i in range(0, ch.length, datalength):
                             logentry = offset + (i // datalength)
-                            self.B0_PANEL_LOG_Counter = max(self.B0_PANEL_LOG_Counter, logentry)
-                            log.debug(f"[handle_msgtypeB0]            Processing log entry {logentry}     data = {toString(ch.data[i:i+datalength])}")
-                            self._process_B0_log_entry(event_total, logentry + 1, ch.data[i:i+datalength])
+                            self.b0_panel_log_counter = max(self.b0_panel_log_counter, logentry)
+                            log.debug(f"[handle_msgtypeB0]            Processing log entry {logentry}     data = {to_string(ch.data[i:i+datalength])}")
+                            self._process_b0_log_entry(event_total, logentry + 1, ch.data[i:i+datalength])
                 elif seq_type == SEQUENCE.MAIN:
                     log.debug(f"[handle_msgtypeB0]          Got Main Event Log Chunk {ch}")
-                    event_total = pmPanelConfig[CFG.EVENTS][self.PanelType]
+                    event_total = pmPanelConfig[CFG.EVENTS][self.panel_type]
                     assert isinstance(event_total, int)
                     datalength = 10 # We know this as we check datasize to be 80 above       ch.datasize // 8 # 8 bits in a byte
-                    offset = self.B0_PANEL_LOG_Counter + 1  # self.B0_PANEL_LOG_Counter is the maximum value from the 0x02 sequence so start from here + 1
+                    offset = self.b0_panel_log_counter + 1  # self.b0_panel_log_counter is the maximum value from the 0x02 sequence so start from here + 1
                     if ch.length % datalength == 0:  # is the length divisible by datalength exactly
                         for i in range(0, ch.length, datalength):
                             logentry = offset + (i // datalength)
-                            log.debug(f"[handle_msgtypeB0]               Processing log entry {logentry}     data = {toString(ch.data[i:i+datalength])}")
-                            self._process_B0_log_entry(event_total, logentry + 1, ch.data[i:i+datalength])
+                            log.debug(f"[handle_msgtypeB0]               Processing log entry {logentry}     data = {to_string(ch.data[i:i+datalength])}")
+                            self._process_b0_log_entry(event_total, logentry + 1, ch.data[i:i+datalength])
 
             case (B0SubType.WIRELESS_DEV_MISSING,  RAW.BITS, IndexName.ZONE,  _ ):
                 # I'm 80% sure of this but all it does is set some attributes of the sensor
@@ -948,7 +953,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 log.debug(f"[handle_msgtypeB0]          Received message, 03 04 information {ind}, zone length = {ch.length}")
                 if beezerodebug4:
                     for z in range(ch.length):
-                        if z in self.SensorList:
+                        if z in self.sensor_list:
                             sa: int = int(ch.data[z])
                             log.debug(f"[handle_msgtypeB0]             Zone/Device {z}  State(hex) {hex(sa)}")
 
@@ -963,10 +968,10 @@ class MessageHandlingB0Data(MessageHandlingBase):
                             if ch.length % ds == 0:  # If it's exactly divisible
                                 b = ch.length // ds
                                 for i in range(b):
-                                    log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}   MIXED     Block {i:<3}   {toString(ch.data[i*ds:(i+1)*ds])}")
+                                    log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}   MIXED     Block {i:<3}   {to_string(ch.data[i*ds:(i+1)*ds])}")
                         if b < 0:
-                            log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}  MIXED   data = {toString(ch.data)}")
+                            log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20}  MIXED   data = {to_string(ch.data)}")
                     else:
                         t = IndexName(ch.index).name if ch.index in IndexName else f"Unknown Index {ch.index}"
-                        log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20} {t:<18}  data = {toString(ch.data)}")
+                        log.debug(f"[handle_msgtypeB0]                     Got Unprocessed {st:<20} {t:<18}  data = {to_string(ch.data)}")
                     #log.debug(f"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

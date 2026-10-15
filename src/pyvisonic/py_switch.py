@@ -1,5 +1,5 @@
 """Switch."""
-from __future__ import annotations  # noqa: TID251
+from __future__ import annotations
 
 import logging
 from typing import Any
@@ -25,9 +25,9 @@ class AlSwitchDevice(AlDeviceCommon):
     def __str__(self) -> str:
         """Convert the AlSwitchDevice to a string."""
         strn = ""
-        strn = strn + ("id=None" if self.id is None else f"id={self.id:<2}")
-        strn = strn + (" Type=None           " if self.switch_type is None else f" Type={self.switch_type:<15}")
-        strn = strn + (" Loc=None          " if self.location is None else f" Loc={self.location:<14}")
+        strn = strn + ("id=None"               if self.id is None          else f"id={self.id:<2}") # type: ignore
+        strn = strn + (" Type=None           " if self.switch_type is None else f" Type={self.switch_type:<15}") # type: ignore
+        strn = strn + (" Loc=None          "   if self.location is None    else f" Loc={self.location:<14}") # type: ignore
         strn = strn + (f" enabled={self.enabled:<2}")
         return strn + (f" state={self.state:<8}")
 

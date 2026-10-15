@@ -1,11 +1,11 @@
 """Build the sdist, build its wheel, and exercise the installed release offline."""
 
 import ast
-from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -23,7 +23,7 @@ VERSION = next(
 
 def run(*args, cwd):
     result = subprocess.run(
-        [sys.executable, *args], cwd=cwd, text=True,
+        [sys.executable, *args], check=False, cwd=cwd, text=True,
         capture_output=True, timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr

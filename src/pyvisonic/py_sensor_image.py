@@ -1,9 +1,8 @@
 """Sensor imagery."""
 from __future__ import annotations
 
-# ruff: noqa: G004
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 
 from .py_const import IMAGE_TRANSFER_TIMEOUT
 from .py_utils import f4_crc16, get_utc_time
@@ -19,17 +18,17 @@ class ImageRecord:
 
     def __init__(self, zone: int, image_id: int, size: int, next_seq: int, lastimage: bool, parent: ImageZoneClass, crc: tuple[int, int] | None = None) -> None:
         """Initialize the ImageRecord."""
-        self._current_id = image_id               # The image_id is the image number from the panel.  The panel outputs a sequence of images.
-        self._buffer: bytearray = bytearray(size) # Data buffer
-        self._lastimage: bool = lastimage         # Boolean, is this the last image that the panel is sending
-        self._current: int = 0                    # current position in the buffer as if gets filled with data
-        self._next_sequence: int = next_seq       # The panel sends the data in a series of messages that are sequenced
-        self._ongoing = True                      # Are we creating the image or have we finished
-        self._last = get_utc_time()               # Date/Time of the last data from the panel, used for timeouts
-        self._zone: int = zone                    # The zone that the image is from
-        self._size: int = size                    # The size of the image in bytes
-        self.parent: ImageZoneClass = parent      # The parent ImageZoneClass
-        self._crc: tuple[int, int] | None = crc   # CRC-16 of the finished image, from the F4-03 header
+        self._current_id = image_id                 # The image_id is the image number from the panel.  The panel outputs a sequence of images.
+        self._buffer: bytearray = bytearray(size)   # Data buffer
+        self._lastimage: bool = lastimage           # Boolean, is this the last image that the panel is sending
+        self._current: int = 0                      # current position in the buffer as if gets filled with data
+        self._next_sequence: int = next_seq         # The panel sends the data in a series of messages that are sequenced
+        self._ongoing = True                        # Are we creating the image or have we finished
+        self._last = get_utc_time()                 # Date/Time of the last data from the panel, used for timeouts
+        self._zone: int = zone                      # The zone that the image is from
+        self._size: int = size                      # The size of the image in bytes
+        self.parent: ImageZoneClass = parent        # The parent ImageZoneClass
+        self._crc: tuple[int, int] | None = crc     # CRC-16 of the finished image, from the F4-03 header
 
     def __str__(self) -> str:
         """Return a string representation."""
@@ -70,7 +69,7 @@ class ImageRecord:
         """Return the last image bool for this image."""
         return self._lastimage
 
-    def hasParent(self) -> bool:
+    def has_parent(self) -> bool:
         """There should always be a parent but just check."""
         return self.parent is not None
 
@@ -79,7 +78,7 @@ class ImageRecord:
         """Return the CRC the panel declared for this image, or None if it did not."""
         return self._crc
 
-    def isChecksumValid(self) -> bool:
+    def is_checksum_valid(self) -> bool:
         """Does the assembled image match the CRC the panel put in its F4-03 header.
 
         This is the only integrity check on an image that actually works. The per-chunk CRC in
@@ -93,10 +92,11 @@ class ImageRecord:
             return True
         return f4_crc16(self._buffer) == self._crc
 
-    def addBufferData(self, databuffer: bytearray | memoryview, sequence: int) -> bool:
+    def add_buffer_data(self, databuffer: bytearray | memoryview, sequence: int) -> bool:
         """Add image buffer data."""
         if self._ongoing:
-            if self._next_sequence is not None and sequence == self._next_sequence:
+            assert self._next_sequence is not None
+            if sequence == self._next_sequence:
                 datalen = len(databuffer)
                 if self._current + datalen > self.size:
                     log.debug("[handle_msgtypeF4]       ERROR: Attempt to add too much image data and the record size has been exceeded")
@@ -117,11 +117,11 @@ class ImageRecord:
             log.debug("[handle_msgtypeF4]       ERROR: Attempt to add image data and the record has not been created")
         return False
 
-    def isImageComplete(self) -> bool:
+    def is_image_complete(self) -> bool:
         """Is the image complete."""
         return not self._ongoing
 
-    def isOngoing(self) -> bool:
+    def is_ongoing(self) -> bool:
         """Is the image data ongoing."""
         return self._ongoing and self._current > 0
 
@@ -157,13 +157,13 @@ class AlImageManager:
 
     def __init__(self) -> None:
         """Initialize the AlImageManager."""
-        self.ImageZone: dict[int, ImageZoneClass] = {}    # Zone and Image Store
+        self.image_zone: dict[int, ImageZoneClass] = {}    # Zone and Image Store
         self.last_image: ImageRecord | None = None                            # A shortcut to the last successfully built image
         # These 3 variables are used whilst creating an image and getting the image data piece by piece
         self._current_zone: int | None = None             # when not None then building an image for this zone number
         self._current_id: int | None = None
         self._current_image: ImageRecord | None = None           # The current image being built
-        self._last_activity: datetime | None = None       # last time any F4 image data arrived, for isSequenceActive
+        self._last_activity: datetime | None = None       # last time any F4 image data arrived, for is_sequence_active
         self._attempts: dict[tuple[int, int], int] = {}   # (zone, image_id) -> times the panel has sent it
 
     def note_attempt(self, zone: int, image_id: int) -> int:
@@ -181,8 +181,8 @@ class AlImageManager:
         if self.last_image is not None:
             zone = self.last_image.zone
             image_id = self.last_image.image_id
-            if zone in self.ImageZone:
-                self.ImageZone[zone].delete(image_id)
+            if zone in self.image_zone:
+                self.image_zone[zone].delete(image_id)
         self.last_image = None
 
     def reset_current(self) -> None:
@@ -198,10 +198,10 @@ class AlImageManager:
         self._last_activity = None
         self._attempts = {}
 
-    def isSequenceActive(self, seconds: int = 15) -> bool:
+    def is_sequence_active(self, seconds: int = 15) -> bool:
         """Is a camera image download underway, including the gaps between images.
 
-        hasStartedSequence() only covers a single image - reset_current() runs as each
+        has_started_sequence() only covers a single image - reset_current() runs as each
         one completes - so it reads False during the several second gap before the panel
         starts the next. This spans the whole sequence.
 
@@ -213,15 +213,15 @@ class AlImageManager:
             return False
         return (get_utc_time() - self._last_activity) < timedelta(seconds=seconds)
 
-    def isImageComplete(self) -> bool:
+    def is_image_complete(self) -> bool:
         """Is the image complete."""
-        return self._current_image is None and self.last_image is not None and self.last_image.isImageComplete()
+        return self._current_image is None and self.last_image is not None and self.last_image.is_image_complete()
 
-    def isImageDataInProgress(self) -> bool:
+    def is_image_data_in_progress(self) -> bool:
         """Is an image part built right now. Note last_image is the finished one, not this."""
-        return self._current_image is not None and self._current_image.isOngoing()
+        return self._current_image is not None and self._current_image.is_ongoing()
 
-    def terminateIfExceededTimeout(self, seconds: float) -> tuple[int, int] | None:
+    def terminate_if_exceeded_timeout(self, seconds: float) -> tuple[int, int] | None:
         """Abandon the in-progress image if the panel has gone quiet for too long.
 
         Returns (zone, image_id) when a capture was abandoned so the caller can tell the user,
@@ -229,7 +229,7 @@ class AlImageManager:
         """
         if self._current_image is not None:
             interval = get_utc_time() - self._current_image.last_time
-            if interval is not None and interval >= timedelta(seconds=seconds):
+            if interval >= timedelta(seconds=seconds):
                 zone, image_id = self._current_image.zone, self._current_image.image_id
                 log.warning(f"[AlImageManager]  Abandoning image {image_id} for zone "
                             f"{zone} after {seconds}s with no data, "
@@ -240,41 +240,41 @@ class AlImageManager:
 
     def create(self, zone: int, count: int) -> bool:
         """Create a new image record. But does not start a new image."""
-        # set up an entry in ImageZone with no images
+        # set up an entry in image_zone with no images
         #    count is the number of images that the user asked for
-        if self.hasStartedSequence():
+        if self.has_started_sequence():
             # Only one image is ever in flight: an F4-05 carries no zone, so the receiver cannot
             # tell two apart. Refusing here is therefore right, but a record left behind by a panel
             # that stopped sending must not block every camera, so drop a dead one first.
-            self.terminateIfExceededTimeout(IMAGE_TRANSFER_TIMEOUT)
-            if self.hasStartedSequence():
+            self.terminate_if_exceeded_timeout(IMAGE_TRANSFER_TIMEOUT)
+            if self.has_started_sequence():
                 return False
-        #if zone not in self.ImageZone:
-        self.ImageZone[zone] = ImageZoneClass(count)
+        #if zone not in self.image_zone:
+        self.image_zone[zone] = ImageZoneClass(count)
         self.last_image = None
         self._attempts = {}
-        log.debug(f'[AlImageManager]  Create JPG: zone = {zone}   start time = {self.ImageZone[zone].start}   count = {self.ImageZone[zone].count}')
+        log.debug(f'[AlImageManager]  Create JPG: zone = {zone}   start time = {self.image_zone[zone].start}   count = {self.image_zone[zone].count}')
         return True
 
-    def hasStartedSequence(self) -> bool:
+    def has_started_sequence(self) -> bool:
         """Has started image sequence."""
         return self._current_image is not None
 
-    def setCurrent(self, zone: int, unique_id: int, image_id: int, size: int, sequence: int, lastimage: bool, totalimages: int, crc: tuple[int, int] | None = None) -> bool:
+    def set_current(self, zone: int, unique_id: int, image_id: int, size: int, sequence: int, lastimage: bool, totalimages: int, crc: tuple[int, int] | None = None) -> bool:
         """Start a new (current) image record."""
-        if self.hasStartedSequence() or zone not in self.ImageZone:
+        if self.has_started_sequence() or zone not in self.image_zone:
             log.debug(f'[AlImageManager]  Setup not successful for zone = {self._current_zone}    unique_id = {hex(unique_id)}    image_id = {image_id}')
             return False
 
         # Set or update the image zone parameters
-        self.ImageZone[zone].unique_id = unique_id
+        self.image_zone[zone].unique_id = unique_id
         # The panel sends 0xFF in the first header of a capture and the real total in every one
         # after, so treat 0xFF as "not told yet" and keep whatever we already know.
         if totalimages != TOTAL_IMAGES_UNKNOWN:
-            self.ImageZone[zone].totalimages = totalimages
+            self.image_zone[zone].totalimages = totalimages
 
         # Always replace the existing ImageRecord if one already exists
-        image_record = ImageRecord(zone = zone, image_id = image_id, size = size, lastimage = lastimage, next_seq = (sequence + 0x10) & 0xFF, parent = self.ImageZone[zone], crc = crc)
+        image_record = ImageRecord(zone = zone, image_id = image_id, size = size, lastimage = lastimage, next_seq = (sequence + 0x10) & 0xFF, parent = self.image_zone[zone], crc = crc)
         self._current_zone = zone
         self._current_id = image_id
         self._current_image = image_record
@@ -285,42 +285,42 @@ class AlImageManager:
         log.debug(f"[AlImageManager]             {image_record}")
         return True
 
-    def addData(self, databuffer: bytearray | memoryview, sequence: int) -> bool:
+    def add_data(self, databuffer: bytearray | memoryview, sequence: int) -> bool:
         """Add image data to the current image record."""
         if self._current_image is None or self._current_zone is None or self._current_id is None:
             return False
         self._last_activity = get_utc_time()
-        insequence = self._current_image.addBufferData(databuffer, sequence)
-        if self._current_image.isImageComplete():
+        insequence = self._current_image.add_buffer_data(databuffer, sequence)
+        if self._current_image.is_image_complete():
             self.last_image = self._current_image
-            self.ImageZone[self._current_zone].add_replace(self._current_id, self._current_image)
+            self.image_zone[self._current_zone].add_replace(self._current_id, self._current_image)
             self.reset_current()
         return insequence
 
-    def getLastImageRecord(self) -> tuple[ImageZoneClass, ImageRecord] | None:
+    def get_last_image_record(self) -> tuple[ImageZoneClass, ImageRecord] | None:
         """Get the last image record."""
-        if self.last_image is not None and self.last_image.hasParent():
+        if self.last_image is not None and self.last_image.has_parent():
             return (self.last_image.parent, self.last_image)
         return None
 
-    def getCurrentImageRecord(self) -> tuple[ImageZoneClass, ImageRecord] | None:
+    def get_current_image_record(self) -> tuple[ImageZoneClass, ImageRecord] | None:
         """Get the last image record."""
-        if self._current_image is not None and self._current_image.hasParent():
+        if self._current_image is not None and self._current_image.has_parent():
             return (self._current_image.parent, self._current_image)
         return None
 
-    def isValidImage(self, zone: int, image_id: int) -> bool:
+    def is_valid_image(self, zone: int, image_id: int) -> bool:
         """Is the image valid."""
-        return self.isValidZone(zone) and image_id in self.ImageZone[zone].images
+        return self.is_valid_zone(zone) and image_id in self.image_zone[zone].images
 
-    def isValidZone(self, zone: int) -> bool:
+    def is_valid_zone(self, zone: int) -> bool:
         """Is the zone valid."""
-        return zone in self.ImageZone
+        return zone in self.image_zone
 
-    def getImage(self, zone: int, image_id: int) -> bytearray | None:
+    def get_image(self, zone: int, image_id: int) -> bytearray | None:
         """Get the image buffer."""
-        return self.ImageZone[zone].images[image_id].buffer if self.isValidImage(zone, image_id) else None
+        return self.image_zone[zone].images[image_id].buffer if self.is_valid_image(zone, image_id) else None
 
     #def getImageList(self, zone) -> list:
     #    """Get the list of images for a zone."""
-    #    return list(self.ImageZone[zone].images) if self.isValidZone(zone) else []
+    #    return list(self.image_zone[zone].images) if self.is_valid_zone(zone) else []

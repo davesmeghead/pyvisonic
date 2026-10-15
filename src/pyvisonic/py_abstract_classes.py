@@ -90,6 +90,10 @@ class AlPanelInterface(AlPanelDataStream):
         """Reset variables associated with the current connection only."""
 
     @abstractmethod
+    def get_panel_ident(self) -> str:
+        """Get the 6 alphanumeric panel identifier."""
+
+    @abstractmethod
     def is_siren_active(self, partition : int) -> tuple[bool, int, AlAlarmType]:
         """Is the siren active."""
 
@@ -169,13 +173,13 @@ class AlPanelInterface(AlPanelDataStream):
 
     # Set the Sensor Bypass to Arm/Bypass individual sensors
     # sensor in range 1 to 31 for PowerMax and 1 to 63 for PowerMaster (inclusive) depending on alarm
-    # bypassValue is False to Arm the Sensor and True to Bypass the sensor
+    # bypass_value is False to Arm the Sensor and True to Bypass the sensor
     # Set code to:
     #    None when we are in Powerlink or Standard Plus and to use the code code from EPROM
     #    "1234" a 4 digit code for any panel mode to use that code
     #    anything else to use code "0000" (this is unlikely to work on any panel)
     @abstractmethod
-    def bypass_command(self, sensor : int | set[int], bypassValue : bool, code : str | None = "") -> AlCommandStatus:
+    def bypass_command(self, sensor : int | set[int], bypass_value : bool, code : str | None = "") -> AlCommandStatus:
         """Set or Clear Sensor Bypass."""
 
     # Get the panels event log
@@ -211,10 +215,6 @@ class AlPanelInterface(AlPanelDataStream):
     @abstractmethod
     def on_panel_event_log(self, fn : Callable[..., None]) -> None:
         """On panel event log callback."""
-
-    @abstractmethod
-    def set_log_events(self, logevents : list[str]) -> None:
-        """Set the log event list."""
 
     @abstractmethod
     def set_investigation_state(self, state: bool) -> None:

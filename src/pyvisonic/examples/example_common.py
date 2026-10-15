@@ -1,14 +1,14 @@
 """Common Classes used in the 2 example."""
 
 import asyncio
+import logging
 from collections.abc import Callable
 from functools import partial
-import logging
 from typing import Any
 
 from serialx import create_serial_connection
 
-from .. import VisonicProtocol, VisonicProtocolClient  # noqa: TID252
+from .. import VisonicProtocol, VisonicProtocolClient
 
 # This class joins the Protocol data stream to the visonic protocol handler.
 #    transport needs to have 2 functions:   write(bytearray)  and  close()
@@ -80,8 +80,8 @@ class BasicConnection:
                 url=path,
                 baudrate=int(baud),
             )
-            return transport, proto  # noqa: TRY300
-        except Exception as ex:
+            return transport, proto
+        except Exception as ex:  # noqa: BLE001
             # Do not cause a full Home Assistant Exception, keep it local here
             print(f"Setting USB Options Exception {ex}")
         return None

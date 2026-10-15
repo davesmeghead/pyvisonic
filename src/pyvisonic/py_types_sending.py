@@ -8,7 +8,7 @@ from typing import Any, NamedTuple, cast
 from .py_const import OBFUS, DebugLevel
 from .py_enum import B0SubType, Receive, Send
 from .py_exception import PyVisonicException
-from .py_utils import convert_bytearray, get_local_time, toString
+from .py_utils import convert_bytearray, get_local_time, to_string
 
 ###################################################################################
 ##########################  Messages that we can send to the panel  ###############
@@ -115,7 +115,7 @@ class B0_SendMessageTuple:
         """Convert to string."""
         if isinstance(self.data, int):
             return f"Chunky={self.chunky} Paged={self.paged} Subtype={self.data}"
-        if isinstance(self.data, B0SubType):
+        if isinstance(self.data, B0SubType): # type: ignore
             return f"Chunky={self.chunky} Paged={self.paged} Subtype={self.data.name}"
         raise PyVisonicException(
             "B0_SendMessageTuple exception, invalid value",
@@ -237,7 +237,7 @@ class VisonicListEntry:
             if self.command.waitforack:
                 self.response.append(Receive.ACKNOWLEDGE)  # add an acknowledge to the list
 
-        self.triedResendingMessage = False
+        self.tried_resending_message = False
         self.created = get_local_time()
 
     def __str__(self) -> str:
@@ -245,7 +245,7 @@ class VisonicListEntry:
         if self.command is not None:
             return f"Command:{self.command.msg}    Options:{self.options}"
         if self.raw is not None:
-            return f"Raw: {toString(self.raw)}"
+            return f"Raw: {to_string(self.raw)}"
         return "Command:None"
 
     def __lt__(self, other: object) -> bool:             # Implement < based on the creation time
@@ -254,7 +254,7 @@ class VisonicListEntry:
             raise TypeError(f"Cannot compare VisonicListEntry with {type(other)}")
         return self.created < other.created
 
-    def insertOptions(self, data : bytearray | bytes) -> bytearray:
+    def insert_options(self, data : bytearray | bytes) -> bytearray:
         """Add options to this list entry."""
         if self.options is None:
             return bytearray(data)
@@ -263,12 +263,12 @@ class VisonicListEntry:
         # the length of instruction.options has to be an even number
         # it is a list of couples:  bitoffset , bytearray to insert
         #op = int(len(instruction.options) / 2)
-        # log.debug(f"[sendPdu] Options {instruction.options} {op}")
+        # log.debug(f"[send_pdu] Options {instruction.options} {op}")
         for opt in self.options:
             s, a = opt   # bit offset as an integer, the int or bytearray to insert
             if isinstance(a, int):
                 data[s] = a
-            elif isinstance(a, bytearray):
+            elif isinstance(a, bytearray): # type: ignore
                 data[s : s + len(a)] = a
             else:
                 raise NotImplementedError
@@ -296,7 +296,7 @@ class PriorityQueueWithPeek(asyncio.PriorityQueue[tuple[int, VisonicListEntry]])
         for item in self._items():
             _, entry = item
             if (
-                isinstance(entry, VisonicListEntry)
+                isinstance(entry, VisonicListEntry) # type: ignore
                 and v.command == entry.command
                 and v.raw == entry.raw
                 and v.options == entry.options

@@ -15,21 +15,21 @@ class MyChecksumCalc:
         self.log = logger
 
     # This is used for debugging from command line
-    def setLogger(self, loggy: logging.Logger) -> None:
+    def set_logger(self, loggy: logging.Logger) -> None:
         """Set the logger."""
         self.log = loggy
 
     # check the checksum of received messages
-    def _validatePDU(self, checksum_type: ChecksumType, packet: bytearray) -> bool:
+    def _validate_pdu(self, checksum_type: ChecksumType, packet: bytearray) -> bool:
         r"""Verify if packet is valid. Packets start with a preamble (\x0D) and end with postamble (\x0A)."""
         # Does it have at least 4 bytes: header, command, optional data, checksum (command and data), footer
         if len(packet) < 4:
             return False
         # Does it start with a preamble
-        if packet[:1] != b"\x0D":
+        if not packet or packet[0] != 0x0D:
             return False
         # Does it end with a footer
-        if packet[-1:] != b"\x0A":
+        if packet[-1] != 0x0A:
             return False
 
         if checksum_type == ChecksumType.IGNORE:
@@ -45,48 +45,48 @@ class MyChecksumCalc:
         # fall through to do ChecksumType.NORMAL
 
         # Check the CRC
-        if packet[-2:-1] == self._calculateCRC(packet[1:-2]):
-            # log.debug("[_validatePDU] VALID CRC PACKET!")
+        if packet[-2:-1] == self._calculate_crc(packet[1:-2]):
+            # log.debug("[_validate_pdu] VALID CRC PACKET!")
             return True
 
         # Check the CRC
-        if packet[-2:-1] == self._calculateCRCAlt(packet[1:-2]):
-            # log.debug("[_validatePDU] VALID ALT CRC PACKET!")
+        if packet[-2:-1] == self._calculate_crc_alt(packet[1:-2]):
+            # log.debug("[_validate_pdu] VALID ALT CRC PACKET!")
             return True
 
-        if packet[-2:-1][0] == self._calculateCRC(packet[1:-2])[0] + 1:
-            #log.debug(f"[_validatePDU] Validated a Packet with a checksum that is 1 more than the actual checksum!!!! {toString(packet)} and {hex(self._calculateCRC(packet[1:-2])[0]).upper()} alt calc is {hex(self._calculateCRCAlt(packet[1:-2])[0]).upper()}")
+        if packet[-2:-1][0] == self._calculate_crc(packet[1:-2])[0] + 1:
+            #log.debug(f"[_validate_pdu] Validated a Packet with a checksum that is 1 more than the actual checksum!!!! {to_string(packet)} and {hex(self._calculate_crc(packet[1:-2])[0]).upper()} alt calc is {hex(self._calculate_crc_alt(packet[1:-2])[0]).upper()}")
             return True
 
-        if packet[-2:-1][0] == self._calculateCRC(packet[1:-2])[0] - 1:
-            #log.debug(f"[_validatePDU] Validated a Packet with a checksum that is 1 less than the actual checksum!!!! {toString(packet)} and {hex(self._calculateCRC(packet[1:-2])[0]).upper()} alt calc is {hex(self._calculateCRCAlt(packet[1:-2])[0]).upper()}")
+        if packet[-2:-1][0] == self._calculate_crc(packet[1:-2])[0] - 1:  # noqa: SIM103
+            #log.debug(f"[_validate_pdu] Validated a Packet with a checksum that is 1 less than the actual checksum!!!! {to_string(packet)} and {hex(self._calculate_crc(packet[1:-2])[0]).upper()} alt calc is {hex(self._calculate_crc_alt(packet[1:-2])[0]).upper()}")
             return True
 
-        #log.debug("[_validatePDU] Not valid packet, CRC failed, may be ongoing and not final 0A")
+        #log.debug("[_validate_pdu] Not valid packet, CRC failed, may be ongoing and not final 0A")
         return False
 
     # alternative to calculate the checksum for sending and receiving messages
-    def _calculateCRCAlt(self, msg: bytearray) -> bytearray:
+    def _calculate_crc_alt(self, msg: bytearray) -> bytearray:
         """Calculate CRC Checksum."""
 
-        # log.debug("[_calculateCRC] Calculating for: %s", toString(msg))
+        # log.debug("[_calculate_crc] Calculating for: %s", to_string(msg))
         # Calculate the checksum
         checksum = 0
         for char in msg[0: len(msg)]:
             checksum += char
         # 29/8/2022
-        #      This works for both my panels and always validates exactly (never using the +1 or -1 code in _validatePDU)
+        #      This works for both my panels and always validates exactly (never using the +1 or -1 code in _validate_pdu)
         #      It also matches the checksums that the Powerlink 3.1 module generates.
         checksum = 256 - (checksum % 255)
         if checksum == 256:
             checksum = 1
-        # log.debug("[_calculateCRC] Calculating for: {toString(msg)}     calculated CRC is: {toString(bytearray([checksum]))}")
+        # log.debug("[_calculate_crc] Calculating for: {to_string(msg)}     calculated CRC is: {to_string(bytearray([checksum]))}")
         return bytearray([checksum])
 
     # calculate the checksum for sending and receiving messages
-    def _calculateCRC(self, msg: bytearray) -> bytearray:
+    def _calculate_crc(self, msg: bytearray) -> bytearray:
         """Calculate CRC Checksum."""
-        # log.debug("[_calculateCRC] Calculating for: %s", toString(msg))
+        # log.debug("[_calculate_crc] Calculating for: %s", to_string(msg))
         # Calculate the checksum
         checksum = 0
         for char in msg[0: len(msg)]:
@@ -94,7 +94,7 @@ class MyChecksumCalc:
         checksum = 0xFF - (checksum % 0xFF)
         if checksum == 0xFF:
             checksum = 0x00
-        # log.debug("[_calculateCRC] Calculating for: {toString(msg)}     calculated CRC is: {toString(bytearray([checksum]))}")
+        # log.debug("[_calculate_crc] Calculating for: {to_string(msg)}     calculated CRC is: {to_string(bytearray([checksum]))}")
         return bytearray([checksum])
 
     def f4_checksum(self, body: bytearray) -> tuple[int, int]:

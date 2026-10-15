@@ -23,7 +23,7 @@ def test_connect_command(
     example = importlib.import_module('pyvisonic.examples.complete_example')
     monkeypatch.setattr(example, 'connection_mode', 'Powerlink')
     client = Mock(spec=example.VisonicClient)
-    client.isSystemStarted.return_value = False
+    client.is_system_started.return_value = False
     client.connect = AsyncMock(return_value=True)
     console = Mock(spec=example.MyAsyncConsole)
     console.input = AsyncMock(side_effect=[command, 'q'])

@@ -119,6 +119,7 @@ class PanelSetting(IntEnum):
     SirenEnrolled      = 26
     DeviceTypesSirens  = 27
     HasPGM             = 28
+    PanelIdent         = 29
     TestTest           = 200
 
 @unique
@@ -355,6 +356,7 @@ class EPROM(Enum):
     ZONE_STR_NAM = auto()
     ZONE_STR_EXT = auto()
     PANEL_SERIAL = auto()
+    PANEL_IDENT = auto()
     GSM_INSTALLED = auto()
     BELL_TIME = auto()
     # Installer and Master

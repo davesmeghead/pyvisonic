@@ -6,7 +6,7 @@ Based on the DomotiGa and Vera implementation:
     Thanks to everyone who helped decode the data.
 
   Originally converted to Python module by Wouter Wolkers and David Field
-"""  # noqa: D205, D415
+"""
 
 # Create the protocol by instantiating VisonicProtocol or wrapping it in a Protocol/Transport asyncio pair
 #    The library is asyncio and needs the active loop, but does not need a Protocol/Transport pair
@@ -23,8 +23,15 @@ import logging
 import os
 import sys
 
-__version__ = "4.0.5"
+__version__ = "4.0.6"
 
+from .client_types import (
+    ConnectionStatus,
+    ConnectionType,
+    VisonicClientCallbacks,
+    VisonicClientSettings,
+)
+from .client_visonic_client import VisonicClient
 from .py_device import AlGenericDevice
 from .py_enum import (
     AlAlarmType,
@@ -45,7 +52,7 @@ from .py_visonic import VisonicProtocol, VisonicProtocolClient
 if not __package__:
     # Make CLI runnable from source tree with
     #    python src/package
-    package_source_path = os.path.dirname(os.path.dirname(__file__))  # noqa: PTH120
+    package_source_path = os.path.dirname(os.path.dirname(__file__))
     sys.path.insert(0, package_source_path)
 
 __author__ = "DaveSmeghead"
@@ -63,7 +70,12 @@ __all__ = [
     "AlSwitchCommand",
     "AlSwitchDevice",
     "AlTerminationType",
+    "ConnectionStatus",
+    "ConnectionType",
     "PyVisonicException",
+    "VisonicClient",
+    "VisonicClientCallbacks",
+    "VisonicClientSettings",
     "VisonicProtocol",
     "VisonicProtocolClient",
 ]

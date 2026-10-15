@@ -8,24 +8,24 @@ from .py_enum import CFG
 
 #################################################################
 ######### Known Panel Types to work (or not) ####################
-#    PanelType=0 : PowerMax , Model=21   Powermaster False  <<== THIS DOES NOT WORK (NO POWERLINK SUPPORT and only supports EPROM download i.e no sensor data) ==>>
-#    PanelType=1 : PowerMax+ , Model=33   Powermaster False
-#    PanelType=1 : PowerMax+ , Model=47   Powermaster False
-#    PanelType=2 : PowerMax Pro , Model=22   Powermaster False
-#    PanelType=4 : PowerMax Pro Part , Model=17   Powermaster False
-#    PanelType=4 : PowerMax Pro Part , Model=62   Powermaster False
-#    PanelType=4 : PowerMax Pro Part , Model=71   Powermaster False
-#    PanelType=4 : PowerMax Pro Part , Model=86   Powermaster False
-#    PanelType=5 : PowerMax Complete Part , Model=18   Powermaster False
-#    PanelType=5 : PowerMax Complete Part , Model=79   Powermaster False
-#    PanelType=7 : PowerMaster10 , Model=32   Powermaster True
-#    PanelType=7 : PowerMaster10 , Model=68   Powermaster True   #  Under investigation. Problem with 0x3F Message data (EPROM) being less than requested
-#    PanelType=7 : PowerMaster10 , Model=153   Powermaster True
-#    PanelType=8 : PowerMaster30 , Model=6   Powermaster True
-#    PanelType=8 : PowerMaster30 , Model=53   Powermaster True
-#    PanelType=8 : PowerMaster30 , Model=63   Powermaster True   #  This is my test panel, all 0x3F  Message data is formatted correctly
-#    PanelType=10: PowerMaster33 , Model=71   Powermaster True   #  Under investigation. Problem with 0x3F Message data (EPROM) being less than requested
-#    PanelType=15: PowerMaster33 , Model=146   Powermaster True  #  Under investigation.
+#    panel_type=0 : PowerMax , Model=21   Powermaster False  <<== THIS DOES NOT WORK (NO POWERLINK SUPPORT and only supports EPROM download i.e no sensor data) ==>>
+#    panel_type=1 : PowerMax+ , Model=33   Powermaster False
+#    panel_type=1 : PowerMax+ , Model=47   Powermaster False
+#    panel_type=2 : PowerMax Pro , Model=22   Powermaster False
+#    panel_type=4 : PowerMax Pro Part , Model=17   Powermaster False
+#    panel_type=4 : PowerMax Pro Part , Model=62   Powermaster False
+#    panel_type=4 : PowerMax Pro Part , Model=71   Powermaster False
+#    panel_type=4 : PowerMax Pro Part , Model=86   Powermaster False
+#    panel_type=5 : PowerMax Complete Part , Model=18   Powermaster False
+#    panel_type=5 : PowerMax Complete Part , Model=79   Powermaster False
+#    panel_type=7 : PowerMaster10 , Model=32   Powermaster True
+#    panel_type=7 : PowerMaster10 , Model=68   Powermaster True   #  Under investigation. Problem with 0x3F Message data (EPROM) being less than requested
+#    panel_type=7 : PowerMaster10 , Model=153   Powermaster True
+#    panel_type=8 : PowerMaster30 , Model=6   Powermaster True
+#    panel_type=8 : PowerMaster30 , Model=53   Powermaster True
+#    panel_type=8 : PowerMaster30 , Model=63   Powermaster True   #  This is my test panel, all 0x3F  Message data is formatted correctly
+#    panel_type=10: PowerMaster33 , Model=71   Powermaster True   #  Under investigation. Problem with 0x3F Message data (EPROM) being less than requested
+#    panel_type=15: PowerMaster33 , Model=146   Powermaster True  #  Under investigation.
 #################################################################
 
 
@@ -56,7 +56,10 @@ pmPanelType = {
 #     This data defines each panel type's maximum capability
 #     I know that panel types 4 and 5 support 3 partitions but I can't figure out how they are represented in A5 and A7 messages, so partitions only supported for PowerMaster and B0 messages
 
-pmPanelConfig = {       #     0       1       2       3       4       5       6       7       8       9      10      11      12      13      14      15      16      17    See pmPanelType above
+type PanelConfigRow = tuple[bool, ...] | tuple[int, ...] | tuple[str, ...]
+
+pmPanelConfig: dict[CFG, PanelConfigRow] = {
+                        #     0       1       2       3       4       5       6       7       8       9      10      11      12      13      14      15      16      17    See pmPanelType above
     CFG.SUPPORTED      : ( False,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True,   True ), # Supported Panels i.e. not a PowerMax
     CFG.KEEPALIVE      : (     0,     25,     25,     25,     25,     25,     25,     15,     15,     15,     15,     15,     15,     15,     15,     15,     15,     15 ), # Keep Alive message interval
     CFG.DLCODE_1       : (    "", "5650", "5650", "5650", "5650", "5650", "5650", "AAAA", "AAAA", "AAAA", "AAAA", "AAAA", "AAAA", "AAAA", "AAAA", "AAAA", "AAAA", "5650" ), # Default download codes (for reset panels or panels that have not been changed)

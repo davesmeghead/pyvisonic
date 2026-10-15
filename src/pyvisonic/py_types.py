@@ -1,10 +1,9 @@
 """Pyvisonic type definitions and classes."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import IntEnum
-import logging
-from typing import Any
 
 from .py_const import MAX_PARTITIONS
 
@@ -27,9 +26,9 @@ class AlPanelEventData:
         if 0 <= p < MAX_PARTITIONS:
             self.partition = p
 
-    def as_dict(self) -> dict[str, int | str]:
+    def as_dict(self) -> dict[str, int | datetime]:
         """Data class representing a panel event."""
-        data : dict[str, Any] = {
+        data : dict[str, int | datetime] = {
             "name": self.name,
             "event": self.action,
             "time": self.time,

@@ -1,8 +1,8 @@
 """Constants and abstract base classes for the alarm panel integration."""
 
+import os
 from datetime import timedelta
 from enum import IntEnum
-import os
 
 from . import __version__
 

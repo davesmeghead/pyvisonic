@@ -1,8 +1,8 @@
 """Sensor types."""
 
 
-from enum import StrEnum
 import logging
+from enum import StrEnum
 from typing import Any, Final, NamedTuple
 
 from .py_const import (

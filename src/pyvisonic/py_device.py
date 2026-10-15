@@ -1,5 +1,5 @@
 """Generic Device."""
-from __future__ import annotations  # noqa: TID251
+from __future__ import annotations
 
 import logging
 from typing import Any
@@ -32,11 +32,11 @@ class AlGenericDevice(AlDeviceCommon):
     def __str__(self) -> str:
         """Convert the AlGenericDevice to a string."""
         strn = ""
-        strn = strn + ("type=None" if self._device_type is None else f"type={self._device_type.name}")
-        strn = strn + ("id=None" if self._device_id is None else f"id={self._device_id:<2}")
+        strn = strn + ("type=None" if self._device_type is None else f"type={self._device_type.name}") # pyright: ignore[reportUnnecessaryComparison]
+        strn = strn + ("id=None" if self._device_id is None else f"id={self._device_id:<2}") # pyright: ignore[reportUnnecessaryComparison]
         strn = strn + (" Model=None          " if self.model is None else f" Type={self.model:<15}")
-        strn = strn + (" Name=None           " if self.device_name is None else f" Name={self.device_name:<15}")
-        strn = strn + (" Loc=None          " if self.location is None else f" Loc={self.location:<14}")
+        strn = strn + (" Name=None           " if self.device_name is None else f" Name={self.device_name:<15}") # pyright: ignore[reportUnnecessaryComparison]
+        strn = strn + (" Loc=None          " if self.location is None else f" Loc={self.location:<14}") # type: ignore
         strn = strn + (f" enabled={self.enabled:<2}")
         return strn + (f" state={self._state:<8}")
 
@@ -121,7 +121,7 @@ class AlGenericDevice(AlDeviceCommon):
         for cb in list(self._callbacks):
             cb(self)
 
-    def do_missing(self, val: bool) -> bool:
+    def do_missing(self, val: bool | None) -> bool:
         """Do missing update."""
         if val is not None and self._is_missing != val:
             self._is_missing = val
@@ -134,7 +134,7 @@ class AlGenericDevice(AlDeviceCommon):
         """Get missing device."""
         return self._is_missing
 
-    def do_inactive(self, val: bool) -> bool:
+    def do_inactive(self, val: bool | None) -> bool:
         """Do inactive update."""
         if val is not None and self._is_inactive != val:
             self._is_inactive = val
@@ -147,7 +147,7 @@ class AlGenericDevice(AlDeviceCommon):
         """Get inactive device."""
         return self._is_inactive
 
-    def do_oneway(self, val: bool) -> bool:
+    def do_oneway(self, val: bool | None) -> bool:
         """Do one way update."""
         if val is not None and self._is_one_way != val:
             self._is_one_way = val

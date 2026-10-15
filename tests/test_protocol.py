@@ -25,9 +25,9 @@ def protocol():
 
 
 @pytest.mark.parametrize('packet,flag', [
-    ('0d 06 f9 0a', 'TimeoutReceived'),
-    ('0d 08 f7 0a', 'AccessDeniedReceived'),
-    ('0d 0f f0 0a', 'ExitReceived'),
+    ('0d 06 f9 0a', 'timeout_received'),
+    ('0d 08 f7 0a', 'access_denied_received'),
+    ('0d 0f f0 0a', 'exit_received'),
 ])
 def test_control_messages_change_state(protocol, packet, flag):
     assert not getattr(protocol, flag)
@@ -39,34 +39,34 @@ def test_control_messages_change_state(protocol, packet, flag):
 def test_fragmented_packet_waits_for_completion(protocol, split):
     packet = bytearray.fromhex('0d 06 f9 0a')
     protocol.data_received(packet[:split])
-    assert not protocol.TimeoutReceived
+    assert not protocol.timeout_received
     protocol.data_received(packet[split:])
-    assert protocol.TimeoutReceived
+    assert protocol.timeout_received
 
 
 def test_coalesced_packets_and_leading_noise(protocol):
     protocol.data_received(bytearray.fromhex('ff ff 0d 06 f9 0a 0d 08 f7 0a'))
-    assert protocol.TimeoutReceived
-    assert protocol.AccessDeniedReceived
+    assert protocol.timeout_received
+    assert protocol.access_denied_received
 
 
 def test_corrupt_packet_does_not_update_state_and_receiver_recovers(protocol):
     protocol.data_received(bytearray.fromhex('0d 06 80 0a'))
-    assert not protocol.TimeoutReceived
+    assert not protocol.timeout_received
     protocol.data_received(bytearray.fromhex('0d 06 f9 0a'))
-    assert protocol.TimeoutReceived
+    assert protocol.timeout_received
 
 
 def test_ack_clears_expected_response(protocol):
-    protocol.pmExpectedResponse = {Receive.ACKNOWLEDGE}
+    protocol.pm_expected_response = {Receive.ACKNOWLEDGE}
     protocol.data_received(bytearray.fromhex('0d 02 fd 0a'))
-    assert not protocol.pmExpectedResponse
+    assert not protocol.pm_expected_response
 
 
 @pytest.mark.parametrize('packet', ['', '0d', '0d 06', '0d 06 f9', '0d 60 9f 0a'])
 def test_decoder_rejects_short_or_unknown_messages(protocol, packet):
     assert protocol.handle_msgtype_testing(bytearray.fromhex(packet)) is False
-    assert not protocol.TimeoutReceived
+    assert not protocol.timeout_received
 
 
 def test_shutdown_ignores_further_data(protocol):

@@ -1,18 +1,15 @@
 """EPROM Decode for PowerMax and PowerMaster Security Systems."""
 
-# Make sure Ruff ignores f-strings
-# ruff: noqa: G004
-
-from dataclasses import dataclass
-from enum import Enum, auto
 import logging
 import math
+from dataclasses import dataclass
+from enum import Enum, auto
 from math import ceil
 from typing import Any, NamedTuple
 
 from .py_const import DISABLE_TEXT, EPROM_DOWNLOAD_ALL, NOBYPASSSTR
 from .py_enum import EPROM, PanelTypeEnum
-from .py_utils import b2i, convert_bytearray, toString
+from .py_utils import b2i, convert_bytearray, to_string
 
 log = logging.getLogger(__name__)
 
@@ -87,7 +84,7 @@ panel_settings_switch_states: dict[str, str] = {
 }
 
 pmDecodePanelSettings: dict[str | EPROM, SettingsCommand] = \
-{                                           #  PSC      show counter data_type  poff psize pstep pbitoff name                                   values
+{                                           #  PSC    show counter data_type     poff psize pstep pbitoff name                                   values
     "jamDetect"            : SettingsCommand( PSC.BOTH,  True,  1, PDT.BYTE   ,   256,   8,   0,    -1,  "Jamming Detection",                  { '0':"Disable", '1':"UL 20/20", '2':"EN 30/60", '3':"Class 6", '4':"Other"} ),
     "entryDelays"          : SettingsCommand( PSC.BOTH,  True,  2, PDT.BYTE   ,   257,   8,   1,     2,  ["Entry Delay 1","Entry Delay 2"],    { '0':"None", '15':"15 Seconds", '30':"30 Seconds", '45':"45 Seconds", '60':"1 Minute", '180':"3 Minutes", '240':"4 Minutes"}),  # 257, 258
     "exitDelay"            : SettingsCommand( PSC.BOTH,  True,  1, PDT.BYTE   ,   259,   8,   0,    -1,  "Exit Delay",                         { '30':"30 Seconds", '60':"60 Seconds", '90':"90 Seconds", '120':"2 Minutes", '180':"3 Minutes", '240':"4 Minutes"}),
@@ -204,6 +201,7 @@ pmDecodePanelSettings: dict[str | EPROM, SettingsCommand] = \
     EPROM.PANEL_MODEL_CODE : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.BYTE   ,  1078,   8,   0,    -1,  "Panel Model Code",                   {} ),   # page 4 offset 54 and 55 ->> Panel model code
     EPROM.PANEL_TYPE_CODE  : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.BYTE   ,  1079,   8,   0,    -1,  "Panel Type Code",                    {} ),   # page 4 offset 55
     EPROM.USERCODE_MAS     : SettingsCommand( PSC.MAS , Dumpy, 48, PDT.CODE   ,  2712,  16,   1,    -1,  "PowerMaster User Codes",             {} ),
+    EPROM.PANEL_IDENT      : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.CODE   ,  2852,  24,   0,    -1,  "Panel Ident",                        {} ),
     EPROM.SWITCH_ZONENAMES : SettingsCommand( PSC.BOTH, Dumpy, 16, PDT.BYTE   ,  2863,   8,   1,    -1,  "Switch Location Name references",    {} ),
     EPROM.ZONE_STR_NAM     : SettingsCommand( PSC.BOTH, Dumpy, 21, PDT.STRING ,  6400, 128,  16,    -1,  "Zone String Names Standard",         {} ),   # Zone String Names e.g "Attic", "Back door", "Basement", "Bathroom" etc 21 strings of 16 characters each
     EPROM.ZONE_STR_EXT     : SettingsCommand( PSC.BOTH, Dumpy, 10, PDT.STRING ,  6736, 128,  16,    -1,  "Zone String Names Custom",           {} ),   # Zone String Names Custom, 10 strings of 16 characters each
@@ -281,9 +279,9 @@ class EPROMManager:
     def __init__(self) -> None:
         """Initialize the EPROM Manager."""
         # Save the EPROM data when downloaded
-        self.pmRawSettings: dict[int, bytearray] = {}
-        self.pmDownloadComplete: bool = False
-        self.lastSavedPages: set[int] = set()
+        self.pm_raw_settings: dict[int, bytearray] = {}
+        self.pm_download_complete: bool = False
+        self.last_saved_pages: set[int] = set()
 
         # Identify the eprom blocks to download for a PowerMax and PowerMaster
         #   Only download the settings that have "EPROM" enumerations
@@ -304,31 +302,31 @@ class EPROMManager:
         }
 
         # And now split the blocks that cross a page boundary
-        self.pmBlockDownload: dict[PanelTypeEnum, list[bytearray]] = {}
+        self.pm_block_download: dict[PanelTypeEnum, list[bytearray]] = {}
         for blk, data in download_dedicated.items():
-            lst = []
+            lst: list[bytearray] = []
             for ed in data:
                 s = ed.start
                 e = ed.end
                 while s < e:
                     lst.append(bytearray([s & 0xFF, (s >> 8) & 0xFF, min(MAX_DOWNLOAD_BLOCK_SIZE, e - s), 0]))
                     s = s + MAX_DOWNLOAD_BLOCK_SIZE
-            self.pmBlockDownload[blk] = lst
+            self.pm_block_download[blk] = lst
             #log.warning(f"{blk}")
             #for i, b in enumerate(lst, start=1):
-            #    log.warning(f"{i}  {toString(b)}")
+            #    log.warning(f"{i}  {to_string(b)}")
 
 
     def reset(self) -> None:
         """Reset the EPROM Manager."""
-        self.pmRawSettings = {}
-        self.pmDownloadComplete = False
-        self.lastSavedPages = set()
+        self.pm_raw_settings = {}
+        self.pm_download_complete = False
+        self.last_saved_pages = set()
 
-    def findLength(self, is_power_master : bool, page : int, index : int) -> int | None:
+    def find_length(self, is_power_master : bool, page : int, index : int) -> int | None:
         """Find the length of a block to download based on page and index."""
         p = PanelTypeEnum.POWER_MASTER if is_power_master else PanelTypeEnum.POWER_MAX
-        for b in self.pmBlockDownload[p]:
+        for b in self.pm_block_download[p]:
             if b[0] == index and b[1] == page:
                 return b[2]
         return None
@@ -397,15 +395,15 @@ class EPROMManager:
             self._merge_ranges(mas_ranges, merge_gap),
         )
 
-    def _validatEPROMSettingsBlock(self, block : bytearray) -> bool:
+    def _validate_eprom_settings_block(self, block : bytearray) -> bool:
         page = block[1]
         index = block[0]
         settings_len = block[2]
 
         retlen = settings_len
         retval = bytearray()
-        while page in self.pmRawSettings and retlen > 0:
-            rawset = self.pmRawSettings[page][index : index + retlen]
+        while page in self.pm_raw_settings and retlen > 0:
+            rawset = self.pm_raw_settings[page][index : index + retlen]
             retval = retval + rawset
             page += 1
             retlen = retlen - len(rawset)
@@ -413,37 +411,38 @@ class EPROMManager:
         log.debug(f"[_validatEPROMSettingsBlock]    page {block[1]:>3}   index {block[0]:>3}   length {block[2]:>3}     {'Already Got It' if settings_len == len(retval) else 'Not Got It'}")
         return settings_len == len(retval)
 
-    def populatEPROMDownload(self, is_power_master : bool) -> list[bytearray]:
+    def populate_eprom_download(self, is_power_master : bool) -> list[bytearray]:
         """Populate the EPROM Download List."""
 
         # Empty list and start at the beginning
-        download_list = []
-        self.pmDownloadComplete = False
+        download_list: list[bytearray] = []
+        self.pm_download_complete = False
 
         if EPROM_DOWNLOAD_ALL:
             for page in range(256):
                 mystr = '00 ' + format(page, '02x').upper() + ' 80 00'
-                if not self._validatEPROMSettingsBlock(convert_bytearray(mystr)):
+                if not self._validate_eprom_settings_block(convert_bytearray(mystr)):
                     download_list.append(convert_bytearray(mystr))
                 mystr = '80 ' + format(page, '02x').upper() + ' 80 00'
-                if not self._validatEPROMSettingsBlock(convert_bytearray(mystr)):
+                if not self._validate_eprom_settings_block(convert_bytearray(mystr)):
                     download_list.append(convert_bytearray(mystr))
         elif is_power_master:
-            for block in self.pmBlockDownload[PanelTypeEnum.POWER_MASTER]:
-                if not self._validatEPROMSettingsBlock(block):
-                    download_list.append(block)  # noqa: PERF401
+            for block in self.pm_block_download[PanelTypeEnum.POWER_MASTER]:
+                if not self._validate_eprom_settings_block(block):
+                    download_list.append(block)
         else:
-            for block in self.pmBlockDownload[PanelTypeEnum.POWER_MAX]:
-                if not self._validatEPROMSettingsBlock(block):
-                    download_list.append(block)  # noqa: PERF401
+            for block in self.pm_block_download[PanelTypeEnum.POWER_MAX]:
+                if not self._validate_eprom_settings_block(block):
+                    download_list.append(block)
 
-        self.pmDownloadComplete = len(download_list) == 0
+        self.pm_download_complete = len(download_list) == 0
+        log.warning(f"EPROM Download list is {download_list}")
         return download_list
 
     # _saveEPROMSettings: add a certain setting to the settings table
     #      When we send a MSG_DL and insert the 4 bytes from pmDownloadItem_t, what we're doing is setting the page, index and len
     # This function stores the downloaded status and EPROM data
-    def saveEPROMSettings(self, page : int, index : int, setting : bytearray) -> None:
+    def save_eprom_settings(self, page : int, index : int, setting : bytearray) -> None:
         """Save the EPROM settings block."""
         settings_len = len(setting)
         wrappoint = index + settings_len - PAGE_SIZE
@@ -466,11 +465,11 @@ class EPROMManager:
             wrappoint = 0
 
         for i in range(wrappoint + 1):
-            if (page + i) not in self.pmRawSettings:
-                self.pmRawSettings[page + i] = bytearray()
+            if (page + i) not in self.pm_raw_settings:
+                self.pm_raw_settings[page + i] = bytearray()
                 for _dummy in range(256):
-                    self.pmRawSettings[page + i].append(255)
-                if len(self.pmRawSettings[page + i]) != 256:
+                    self.pm_raw_settings[page + i].append(255)
+                if len(self.pm_raw_settings[page + i]) != 256:
                     log.debug("[Write Settings] the EPROM settings is incorrect for page %s", str(page + i))
                 # else:
                 #    log.debug("[Write Settings] WHOOOPEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE")
@@ -479,38 +478,38 @@ class EPROMManager:
             if i == 1:
                 index = 0
             #log.debug(f"[Write Settings]         Writing settings page {page+i}  index {index}    length {settings_len}")
-            self.pmRawSettings[page + i] = self.pmRawSettings[page + i][0:index] + sett[i] + self.pmRawSettings[page + i][index + settings_len :]
+            self.pm_raw_settings[page + i] = self.pm_raw_settings[page + i][0:index] + sett[i] + self.pm_raw_settings[page + i][index + settings_len :]
             saved.add(page + i)
-            #if len(self.pmRawSettings[page + i]) != 256:
-            #    log.debug(f"[Write Settings] OOOOOOOOOOOOOOOOOOOO len = {len(self.pmRawSettings[page + i])}")
+            #if len(self.pm_raw_settings[page + i]) != 256:
+            #    log.debug(f"[Write Settings] OOOOOOOOOOOOOOOOOOOO len = {len(self.pm_raw_settings[page + i])}")
             # else:
-            #    log.debug(f"[Write Settings] Page {page+i} is now {toString(self.pmRawSettings[page + i])}")
+            #    log.debug(f"[Write Settings] Page {page+i} is now {to_string(self.pm_raw_settings[page + i])}")
 
-        self.lastSavedPages = saved   # The last set of saved pages
-        #log.debug(f"[Write Settings]    The last set of saved pages {self.lastSavedPages}")
+        self.last_saved_pages = saved   # The last set of saved pages
+        #log.debug(f"[Write Settings]    The last set of saved pages {self.last_saved_pages}")
 
-    def removeLastSaved(self) -> None:
+    def remove_last_saved(self) -> None:
         """Remove the last saved EPROM settings pages."""
-        if len(self.lastSavedPages) > 0:
-            self.pmDownloadComplete = False
-            for sp in self.lastSavedPages:
-                if sp in self.pmRawSettings:   # just to make sure
-                    del self.pmRawSettings[sp]
-            self.lastSavedPages = set()       # just in case this function is called again
+        if len(self.last_saved_pages) > 0:
+            self.pm_download_complete = False
+            for sp in self.last_saved_pages:
+                if sp in self.pm_raw_settings:   # just to make sure
+                    del self.pm_raw_settings[sp]
+            self.last_saved_pages = set()       # just in case this function is called again
 
-    # _readEPROMSettingsPageIndex
+    # _read_eprom_settings_page_index
     # This function retrieves the downloaded status and EPROM data
-    def _readEPROMSettingsPageIndex(self, page : int, index : int, settings_len : int) -> bytearray:
+    def _read_eprom_settings_page_index(self, page : int, index : int, settings_len : int) -> bytearray:
         retlen = settings_len
         retval = bytearray()
         while index > 255:
             page += 1
             index = index - 256
 
-        if self.pmDownloadComplete:
-            #log.debug(f"[_readEPROMSettingsPageIndex]    Entering Function  page {page}   index {index}    length {settings_len}")
-            while page in self.pmRawSettings and retlen > 0:
-                rawset = self.pmRawSettings[page][index : index + retlen]
+        if self.pm_download_complete:
+            #log.debug(f"[_read_eprom_settings_page_index]    Entering Function  page {page}   index {index}    length {settings_len}")
+            while page in self.pm_raw_settings and retlen > 0:
+                rawset = self.pm_raw_settings[page][index : index + retlen]
                 retval = retval + rawset
                 page += 1
                 retlen = retlen - len(rawset)
@@ -529,34 +528,33 @@ class EPROMManager:
     #      page index lenhigh lenlow
 #    def readEPROMSettings(self, item):
 #        """Read the EPROM settings based on the item."""
-#        return self._readEPROMSettingsPageIndex(item[0], item[1], item[3] + (PAGE_SIZE * item[2]))
+#        return self._read_eprom_settings_page_index(item[0], item[1], item[3] + (PAGE_SIZE * item[2]))
 
     # This function was going to save the settings (including EPROM) to a file
-    def _dumpEPROMSettings(self) -> None:
-        log.debug("Dumping EPROM Settings")
+    def dump_eprom_settings(self) -> None:
+        log.warning("Dumping EPROM Settings")
         for p in range(PAGE_SIZE):  ## assume page can go from 0 to 255
-            if p in self.pmRawSettings:
+            if p in self.pm_raw_settings:
                 for j in range(0, PAGE_SIZE, 0x10):  ## assume that each page can be 256 bytes long, step by 16 bytes
                     # do not display the rows with pin numbers
                     # if not (( p == 1 and j == 240 ) or (p == 2 and j == 0) or (p == 10 and j >= 140)):
-                    if EPROM_DOWNLOAD_ALL or ((p != 1 or j != 240) and (p != 2 or j != 0) and (p != 10 or j <= 140)):
-                        if j <= len(self.pmRawSettings[p]):
-                            sr = toString(self.pmRawSettings[p][j : j + 0x10])
-                            log.debug(f"{p:3}:{j:3}  {sr}")
+                    if EPROM_DOWNLOAD_ALL or ((p != 1 or j != 240) and (p != 2 or j != 0) and (p != 10 or j <= 140)):  # noqa: SIM102
+                        if j <= len(self.pm_raw_settings[p]):
+                            sr = to_string(self.pm_raw_settings[p][j : j + 0x10])
+                            log.warning(f"{p:3}:{j:3}  {sr}")
 
 #    def _calcBoolFromIntMask(self, val, mask) -> bool:
 #        return val & mask != 0
 
     # SettingsCommand = collections.namedtuple('SettingsCommand', 'show count data_type poff psize pstep pbitoff name values')
-    def lookupEprom(self, ref : EPROM | SettingsCommand | str , expected_size : int = -1 ) -> list[str | int | bytearray]:
+    def lookup_eprom(self, ref : EPROM | SettingsCommand | str , expected_size : int = -1 ) -> list[str | int | bytearray]:
         """Lookup EPROM settings based on reference."""
         val : SettingsCommand | None = None
 
         if isinstance(ref, SettingsCommand):
             val = ref
         elif ref in pmDecodePanelSettings:
-            if isinstance(ref, (EPROM, str)):
-                val = pmDecodePanelSettings[ref]
+            val = pmDecodePanelSettings[ref]
 
         retval: list[str | int | bytearray] = []
 
@@ -583,9 +581,9 @@ class EPROMManager:
 
             match (val.data_type):
                 case PDT.BYTE | PDT.INT:
-                    #log.debug(f"[lookupEprom] A {val}")
-                    v = self._readEPROMSettingsPageIndex(page, pos, size)
-                    #log.debug(f"[lookupEprom] B {v}")
+                    #log.debug(f"[lookup_eprom] A {val}")
+                    v = self._read_eprom_settings_page_index(page, pos, size)
+                    #log.debug(f"[lookup_eprom] B {v}")
                     if val.psize > 8:
                         myvalue = v
                         if val.data_type == PDT.INT:
@@ -603,26 +601,26 @@ class EPROMManager:
                 case PDT.PHONE:
                     myvalue = ""
                     for j in range(size):
-                        nr = self._readEPROMSettingsPageIndex(page, pos + j, 1)
+                        nr = self._read_eprom_settings_page_index(page, pos + j, 1)
                         if nr[0] != EMPTY_BYTE:
                             myvalue += "".join(f"{b:02x}" for b in nr)
                 case PDT.TIME:
-                    t = self._readEPROMSettingsPageIndex(page, pos, size)
+                    t = self._read_eprom_settings_page_index(page, pos, size)
                     myvalue = ":".join(f"{b:02d}" for b in t)  # miss the last character off, which will be a colon :
                 case PDT.CODE | PDT.ACCOUNT:
-                    nr = self._readEPROMSettingsPageIndex(page, pos, size)
+                    nr = self._read_eprom_settings_page_index(page, pos, size)
                     myvalue = "".join(f"{b:02x}" for b in nr).upper()
                     myvalue = myvalue.replace("FF", ".")
                 case PDT.STRING | PDT.DATE:
                     myvalue = ""
                     for j in range(size):
-                        nr = self._readEPROMSettingsPageIndex(page, pos + j, 1)
-                        #log.debug(f"[lookupEprom] {page} {pos+j}  character {nr}   {chr(nr[0])}")
+                        nr = self._read_eprom_settings_page_index(page, pos + j, 1)
+                        #log.debug(f"[lookup_eprom] {page} {pos+j}  character {nr}   {chr(nr[0])}")
                         if nr[0] != EMPTY_BYTE:
                             myvalue = myvalue + chr(nr[0])
-                    #log.debug(f"[lookupEprom] myvalue  <{myvalue}>")
+                    #log.debug(f"[lookup_eprom] myvalue  <{myvalue}>")
                     myvalue = myvalue.strip()
-                    #log.debug(f"[lookupEprom] myvalue stripped <{myvalue}>")
+                    #log.debug(f"[lookup_eprom] myvalue stripped <{myvalue}>")
 
             if len(val.values) > 0:
                 if isinstance(myvalue, int) and str(myvalue) in val.values:
@@ -638,64 +636,61 @@ class EPROMManager:
 
         return retval
 
-    def lookupEpromSingle(self, key : EPROM | SettingsCommand | str, item: int = 0 ) -> str | int | bytearray | None:
+    def lookup_eprom_single(self, key : EPROM | SettingsCommand | str, item: int = 0 ) -> str | int | bytearray | None:
         """Lookup a single EPROM setting based on reference."""
-        v = self.lookupEprom(key)
+        v = self.lookup_eprom(key)
         if len(v) >= item+1:
             return v[item]
         return None
 
-    def processEPROMData(self, is_power_master : bool) -> dict[str,Any]:
+    def process_eprom_data(self, is_power_master : bool) -> dict[str,Any]:
         """Process the EPROM data into a dictionary of panel status."""
         # If val.show is True but add_to_log is False then:
-        #      Add the "True" values to the self.PanelStatus
+        #      Add the "True" values to the self.panel_status
         # If val.show is True and add_to_log is True then:
-        #      Add all (either PowerMax / PowerMaster) values to the self.PanelStatus and the log file
+        #      Add all (either PowerMax / PowerMaster) values to the self.panel_status and the log file
         panel_status : dict[str,Any] = {}
         add_to_log = False
         for key, val in pmDecodePanelSettings.items():
             #val = pmDecodePanelSettings[key]
             panel_test = val.panel in (PSC.BOTH, PSC.MAS) if is_power_master else val.panel in (PSC.BOTH, PSC.MAX)
             if panel_test and val.show:
-                result = self.lookupEprom(val)
-                if result is not None:
-                    if isinstance(val.name, str) and len(result) == 1:
-                        if isinstance(result[0], (bytes, bytearray)):
-                            packet = bytearray(result[0])
-                            tmpdata = toString(packet)
-                            if add_to_log:
-                                log.debug(f"[processEPROMData]      {key:<18}  {val.name:<40}  {tmpdata}")
-                            panel_status[val.name] = tmpdata
-                        else:
-                            if add_to_log:
-                                log.debug(f"[processEPROMData]      {key:<18}  {val.name:<40}  {result[0]}")
-                            panel_status[val.name] = result[0]
-
-                    elif isinstance(val.name, list) and len(result) == len(val.name):
-                        for i, item in enumerate(result):
-                            if isinstance(item, (bytes, bytearray)):
-                                tmpdata = toString(bytearray(item))
-                                if add_to_log:
-                                    log.debug(f"[processEPROMData]      {key:<18}  {val.name[i]:<40}  {tmpdata}")
-                                panel_status[val.name[i]] = tmpdata
-                            else:
-                                if add_to_log:
-                                    log.debug(f"[processEPROMData]      {key:<18}  {val.name[i]:<40}  {item}")
-                                panel_status[val.name[i]] = item
-
-                    elif len(result) > 1 and isinstance(val.name, str):
-                        tmpdata = ""
-                        for _i, item in enumerate(result):
-                            if isinstance(item, (bytes, bytearray)):
-                                tmpdata = tmpdata + toString(bytearray(item)) + ", "
-                            else:
-                                tmpdata = tmpdata + str(item) + ", "
-                        # there's at least 2 so this will not exception
-                        tmpdata = tmpdata[:-2]
+                result = self.lookup_eprom(val)
+                if isinstance(val.name, str) and len(result) == 1:
+                    if isinstance(result[0], (bytes, bytearray)):
+                        packet = bytearray(result[0])
+                        tmpdata = to_string(packet)
                         if add_to_log:
                             log.debug(f"[processEPROMData]      {key:<18}  {val.name:<40}  {tmpdata}")
                         panel_status[val.name] = tmpdata
+                    else:
+                        if add_to_log:
+                            log.debug(f"[processEPROMData]      {key:<18}  {val.name:<40}  {result[0]}")
+                        panel_status[val.name] = result[0]
 
-                    #else:
-                    #    log.debug(f"[processEPROMData]   ************************** NOTHING DONE ************************     {key:<18}  {val.name}  {result}")
+                elif isinstance(val.name, list) and len(result) == len(val.name):
+                    for i, item in enumerate(result):
+                        if isinstance(item, (bytes, bytearray)):
+                            tmpdata = to_string(bytearray(item))
+                            if add_to_log:
+                                log.debug(f"[processEPROMData]      {key:<18}  {val.name[i]:<40}  {tmpdata}")
+                            panel_status[val.name[i]] = tmpdata
+                        else:
+                            if add_to_log:
+                                log.debug(f"[processEPROMData]      {key:<18}  {val.name[i]:<40}  {item}")
+                            panel_status[val.name[i]] = item
+
+                elif len(result) > 1 and isinstance(val.name, str):
+                    tmpdata = ""
+                    for _i, item in enumerate(result):
+                        if isinstance(item, (bytes, bytearray)):
+                            tmpdata = tmpdata + to_string(bytearray(item)) + ", "
+                        else:
+                            tmpdata = tmpdata + str(item) + ", "
+                    # there's at least 2 so this will not exception
+                    tmpdata = tmpdata[:-2]
+                    if add_to_log:
+                        log.debug(f"[processEPROMData]      {key:<18}  {val.name:<40}  {tmpdata}")
+                    panel_status[val.name] = tmpdata
+
         return panel_status

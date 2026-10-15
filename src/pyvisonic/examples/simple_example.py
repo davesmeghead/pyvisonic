@@ -1,18 +1,18 @@
 """Create a commandline connection to a Visonic PowerMax or PowerMaster Alarm System."""
 
 # Make sure Ruff ignores f-strings
-# ruff: noqa: T201, BLE001
+# ruff: noqa: BLE001
 
 # python3 -m pyvisonic.examples.simple_example -usb /dev/ttyUSB0 -baud 38400 -print info
 
 import argparse
 import asyncio
-from datetime import timedelta
 import logging
 import sys
 import time
+from datetime import timedelta
 
-from .. import VisonicProtocol, VisonicProtocolClient  # noqa: TID252
+from .. import VisonicProtocol, VisonicProtocolClient
 from .example_common import BasicConnection
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,12 +39,12 @@ disable_all_panel_commands = connect.lower() == "dataonly"
 if disable_all_panel_commands:
     force_standard_mode = True
 
-def setupLocalLoggerBasic() -> logging.Logger:
+def setup_local_logger_basic() -> logging.Logger:
     """Local logging handler."""
-    import logging  # noqa: PLC0415
+    import logging
     return logging.getLogger()
 
-def setupLocalLogger(level: str = "WARNING", empty: bool = False) -> None:
+def setup_local_logger(level: str = "WARNING", empty: bool = False) -> None:
     """Set up local logger."""
     global logger_level
 
@@ -80,19 +80,18 @@ def setupLocalLogger(level: str = "WARNING", empty: bool = False) -> None:
 
     # level = logging.getLevelName('INFO')
     logger_level = level
-    level = logging.getLevelName(level)  # INFO, DEBUG
-    root_logger.setLevel(level)
+    root_logger.setLevel(logger_level)
 
-def ConfigureLogger(mode: str) -> None:
+def configure_logger(mode: str) -> None:
     """Config logger."""
     if mode[0] == 'd':
-        setupLocalLogger("DEBUG")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
+        setup_local_logger("DEBUG")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
     elif mode[0] == 'i':
-        setupLocalLogger("INFO")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
+        setup_local_logger("INFO")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
     elif mode[0] == 'w':
-        setupLocalLogger("WARNING")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
+        setup_local_logger("WARNING")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
     elif mode[0] == 'e':
-        setupLocalLogger("ERROR")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
+        setup_local_logger("ERROR")   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
 
 class VisonicClient(BasicConnection):
     """Client."""
@@ -116,28 +115,28 @@ class VisonicClient(BasicConnection):
                 #self.visonicProtocol.resetMessageData()
                 # Get Visonic specific configuration.
                 #print(f"Reconnection Device Type is {conn_type}")
+                conn = None
                 if conn_type == "ethernet":
                     host = args.address
                     port = args.port
-                    billy = await self.async_create_tcp_visonic_connection(loop=self.loop, vp=self.visonic_protocol, connection_status_callback=None, address=host, port=port)
+                    conn = await self.async_create_tcp_visonic_connection(loop=self.loop, vp=self.visonic_protocol, connection_status_callback=None, address=host, port=port)
                 elif conn_type == "usb":
                     path = args.usb
                     baud = args.baud
-                    billy = await self.async_create_usb_visonic_connection(loop=self.loop, vp=self.visonic_protocol, connection_status_callback=None, path=path, baud=baud)
-                if billy is not None:
-                    self.my_transport, self.cvp = billy
+                    conn = await self.async_create_usb_visonic_connection(loop=self.loop, vp=self.visonic_protocol, connection_status_callback=None, path=path, baud=baud)
+                if conn is not None:
+                    self.my_transport, self.cvp = conn
                     return self.cvp is not None and self.my_transport is not None
             return False
 
         print("Client Creating VP")
         self.visonic_protocol = VisonicProtocol(loop=testloop, force_standard_mode=force_standard_mode, disable_all_commands=disable_all_panel_commands, download_code=None, user_code_slot=1, logger=None)
-        if self.visonic_protocol is not None:
-            await connect_comms()
+        await connect_comms()
 
 if __name__ == '__main__':
-    log = setupLocalLoggerBasic()
-    setupLocalLogger("ERROR", empty = True)   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
-    ConfigureLogger(str(args.print).lower())
+    log = setup_local_logger_basic()
+    setup_local_logger("ERROR", empty = True)   # one of "WARNING"  "INFO"  "ERROR"   "DEBUG"
+    configure_logger(str(args.print).lower())
 
     testloop = asyncio.new_event_loop()
     asyncio.set_event_loop(testloop)
@@ -149,7 +148,7 @@ if __name__ == '__main__':
         testloop.run_forever()
     except KeyboardInterrupt:
         pass
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     finally:
         # cleanup connection

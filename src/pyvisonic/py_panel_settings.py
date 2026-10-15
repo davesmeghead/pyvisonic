@@ -1,12 +1,12 @@
 """Panel settings."""
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from numbers import Number
 from typing import Any, Final, NamedTuple
 
 from .py_const import NOBYPASSSTR
 from .py_enum import EPROM, B0SubType, EventType, IndexName, PanelSetting
-from .py_utils import toString
+from .py_utils import to_string
 
 log = logging.getLogger(__name__)
 
@@ -15,11 +15,11 @@ log = logging.getLogger(__name__)
 ### (for PowerMaster Panels) B0 message data                                    ###
 ###################################################################################
 # pmPanelSettingCodes represents the ways that we can get data to populate the PanelSettings
-#   A PowerMax Panel only has 1 way and that is to download the EPROM = PMaxEPROM
+#   A PowerMax Panel only has 1 way and that is to download the EPROM = p_max_eprom
 #   A PowerMaster Panel has 3 ways:
-#        1. Download the EPROM = PMasterEPROM
-#        2. Ask the panel for a B0 panel settings message 0x51 e.g. 0x0800 sends the user codes  = PMasterB035Panel
-#        3. Ask the panel for a B0 data message = PMasterB0Mess PMasterB0Index
+#        1. Download the EPROM = p_master_eprom
+#        2. Ask the panel for a B0 panel settings message 0x51 e.g. 0x0800 sends the user codes  = p_master_b035_panel
+#        3. Ask the panel for a B0 data message = p_master_b0_mess p_master_b0_index
 
 # Zone names are translated using the language translation file. These need to match the keys in the translations.
 pmZoneName = [
@@ -37,12 +37,12 @@ class PanelSettingCodesType[T]:
     """Visonic Panel Settings Mapping Definition."""
     item: int | None
     mandatory: bool
-    PMaxEPROM: EPROM | None       # Offset/Enum for PowerMax
-    PMasterEPROM: EPROM | None    # Offset/Enum for PowerMaster
-    PMasterB035Panel: int | None
-    PMasterB042Panel: int | None
-    PMasterB0Mess: B0SubType | None
-    PMasterB0Index: IndexName | None
+    p_max_eprom: EPROM | None       # Offset/Enum for PowerMax
+    p_master_eprom: EPROM | None    # Offset/Enum for PowerMaster
+    p_master_b035_panel: int | None
+    p_master_b042_panel: int | None
+    p_master_b0_mess: B0SubType | None
+    p_master_b0_index: IndexName | None
     _data: T
     isvalid: bool = False
 
@@ -73,13 +73,13 @@ class PanelSettingCodesType[T]:
                 self._data = list(value)  # type: ignore[arg-type, call-overload]
                 self.isvalid = True
             else:
-                raise TypeError  # noqa: TRY301
+                raise TypeError
         except (TypeError, ValueError):
             log.warning(
                 "Invalid data type %s for %s (expected %s)",
                 type(value).__name__,
-                self._data,
-                type(self._data).__name__,
+                self._data, # type: ignore
+                type(self._data).__name__, # type: ignore
             )
             # Do it anyway to save the data
             self._data = value
@@ -98,8 +98,8 @@ class PanelSettingCodesType[T]:
             raise IndexError(
                 f"Offset {offset} out of range for {self.__class__.__name__}"
             )
-        assert isinstance(self._data[offset], int)
-        self._data[offset] = value
+        assert isinstance(self._data[offset], int) # type: ignore
+        self._data[offset] = value # type: ignore
 
     def set_bool(self, offset: int, value: bool) -> None:
         """Set the panel setting data."""
@@ -109,8 +109,8 @@ class PanelSettingCodesType[T]:
             raise IndexError(
                 f"Offset {offset} out of range for {self.__class__.__name__}"
             )
-        assert isinstance(self._data[offset], bool)
-        self._data[offset] = value
+        assert isinstance(self._data[offset], bool) # type: ignore
+        self._data[offset] = value # type: ignore
 
     def _get(self, item: int = 0) -> str | int | bool:
         """Get an element from the panel setting data."""
@@ -123,7 +123,7 @@ class PanelSettingCodesType[T]:
             return self._data
 
         assert isinstance(self._data, (list, bytearray))
-        return self._data[item]
+        return self._data[item] # type: ignore
 
     def get_str(self, item: int = 0) -> str:
         """Get a string element from the panel setting data."""
@@ -151,32 +151,32 @@ class PanelSettingCodesType[T]:
         if isinstance(self._data, str):
             return self._data
         if isinstance(self._data, bytearray):
-            return toString(self._data)
-        if isinstance(self._data, list) and len(self._data) > 0 and isinstance(self._data[0], bytearray):
+            return to_string(self._data)
+        if isinstance(self._data, list) and len(self._data) > 0 and isinstance(self._data[0], bytearray): # type: ignore
             s: str = ""
-            for i in range(len(self._data)):
-                s = s + "(" + toString(self._data[i]) + ")"
+            for i in range(len(self._data)): # type: ignore
+                s = s + "(" + to_string(self._data[i]) + ")" # type: ignore
             return s
-        return str(self._data)
+        return str(self._data) # type: ignore
 
     def length(self) -> int:
         """Return the length of the panel setting data."""
         if isinstance(self._data, (str, Number)):
             return 1
         if isinstance(self._data, (list, bytearray)):
-            return len(self._data)
+            return len(self._data) # type: ignore
         log.warning("Unknown type for panel setting data: %s", type(self._data).__name__)
         return 0
 
 # fmt: off
 
-# PanelSettingCodesType = collections.namedtuple('PanelSettingCodesType', 'item mandatory PMaxEPROM PMasterEPROM PMasterB035Panel PMasterB042Panel PMasterB0Mess PMasterB0Index default')
-# For PMasterB0Mess there is an assumption that the message type is 0x03, and this is the subtype
-#       PMasterB0Index index 3 is Sensor data, I should have an enum for this
+# PanelSettingCodesType = collections.namedtuple('PanelSettingCodesType', 'item mandatory p_max_eprom p_master_eprom p_master_b035_panel p_master_b042_panel p_master_b0_mess p_master_b0_index default')
+# For p_master_b0_mess there is an assumption that the message type is 0x03, and this is the subtype
+#       p_master_b0_index index 3 is Sensor data, I should have an enum for this
 #       mandatory : When True, this setting means that the data is mandatory before creating sensors when trying for Powerlink emulation mode
 # These are used to create the self.PanelSettings dictionary to create a common set of settings across the different ways of obtaining them
 pmPanelSettingCodes : dict[PanelSetting, PanelSettingCodesType[Any]] = {
-                       #                                                    item mandatory PMaxEPROM            PMasterEPROM        PMasterB035Panel PMasterB042Panel PMasterB0Mess          PMasterB0Index    default
+                       #                                                    item mandatory p_max_eprom            p_master_eprom        p_master_b035_panel p_master_b042_panel p_master_b0_mess          p_master_b0_index    default
     PanelSetting.UserCodes        : PanelSettingCodesType[list[int]]       ( None,  True, EPROM.USERCODE_MAX,   EPROM.USERCODE_MAS,   None  ,         0x0008,         None,                   None,             [0,0] ),
     PanelSetting.PartitionData    : PanelSettingCodesType[list[int]]       ( None,  True, EPROM.PART_ZONE_DATA, EPROM.PART_ZONE_DATA, None  ,         0x0036,         None,                   None,             []),
     PanelSetting.ZoneNames        : PanelSettingCodesType[list[int]]       ( None,  True, EPROM.ZONENAME_MAX,   EPROM.ZONENAME_MAS,   None  ,         None  ,         B0SubType.ZONE_NAMES,   IndexName.ZONE,   []),
@@ -193,9 +193,10 @@ pmPanelSettingCodes : dict[PanelSetting, PanelSettingCodesType[Any]] = {
     PanelSetting.PanelBypass      : PanelSettingCodesType[str]             ( 0,     True, EPROM.PANEL_BYPASS,   EPROM.PANEL_BYPASS,   None  ,         None  ,         None,                   None,             NOBYPASSSTR),
     PanelSetting.PanelDownload    : PanelSettingCodesType[str]             ( 0,    False, EPROM.INSTALDLCODE,   EPROM.INSTALDLCODE,   None  ,         0x000f,         None,                   None,             ""),
     PanelSetting.PanelSerial      : PanelSettingCodesType[str]             ( 0,    False, EPROM.PANEL_SERIAL,   EPROM.PANEL_SERIAL,   None  ,         0x0002,         None,                   None,             "" ),
+    PanelSetting.PanelIdent       : PanelSettingCodesType[str]             ( 0,    False, EPROM.PANEL_IDENT,    EPROM.PANEL_IDENT,    None  ,         None  ,         None,                   None,             "" ),
     PanelSetting.PartitionEnabled : PanelSettingCodesType[bool]            ( 0,     True, EPROM.PART_ENABLED,   EPROM.PART_ENABLED,   None  ,         0x0030,         None,                   None,             False ),
     PanelSetting.ZoneChime        : PanelSettingCodesType[bytearray]       ( None,  True, None,                 None,                 None  ,         0x0033,         None,                   None,             bytearray() ),
-    PanelSetting.Keypad_1Way      : PanelSettingCodesType[bytearray]       ( None, False, EPROM.KEYPAD_1_MAX,   None,                 None  ,         None  ,         None,                   None,             bytearray() ),
+    PanelSetting.Keypad_1Way      : PanelSettingCodesType[list[bytearray]] ( None, False, EPROM.KEYPAD_1_MAX,   None,                 None  ,         None  ,         None,                   None,             [bytearray() for _ in range(8)] ),
     PanelSetting.Keypad_2Way      : PanelSettingCodesType[list[bytearray]] ( None, False, EPROM.KEYPAD_2_MAX,   EPROM.KEYPAD_MAS,     None  ,         None  ,         None,                   None,             [bytearray() for _ in range(16)] ),
     PanelSetting.KeyFob           : PanelSettingCodesType[bytearray]       ( None, False, None,                 None,                 None  ,         None  ,         None,                   None,             bytearray() ),
     PanelSetting.Sirens           : PanelSettingCodesType[list[bytearray]] ( None, False, EPROM.SIRENS_MAX,     EPROM.SIRENS_MAS,     None  ,         None  ,         None,                   None,             [bytearray() for _ in range(8)] ),
@@ -209,11 +210,11 @@ pmPanelSettingCodes : dict[PanelSetting, PanelSettingCodesType[Any]] = {
 }
 
 # These are what I think but not 100% sure so i've missed them out on purpose
-#   PanelSetting.PanelName        : PanelSettingCodesType( None, False, None,                 None,                 None  ,         0x003C,         None,                   None,             toString ,     bytearray() ),
-#   PanelSetting.TestTest         : PanelSettingCodesType( None, None,               None,                       None  ,         0x0031,         None,           None,            toString ,     bytearray() ),
-#   PanelSetting.KeyFob           : PanelSettingCodesType( None, "KeyFobsPMax",      "",                         None  ,         None  ,         None,           None,            toString ,     bytearray()),
-#   PanelSetting.AlarmLED         : PanelSettingCodesType( None, None,               "AlarmLED",                 None  ,         None  ,         None,           None,            toString ,     bytearray()),
-#   PanelSetting.ZoneSignal       : PanelSettingCodesType( None, "ZoneSignalPMax",   "",                         None  ,         None  ,         None,           None,            toString ,     bytearray()),
+#   PanelSetting.PanelName        : PanelSettingCodesType( None, False, None,                 None,                 None  ,         0x003C,         None,                   None,             to_string ,     bytearray() ),
+#   PanelSetting.TestTest         : PanelSettingCodesType( None, None,               None,                       None  ,         0x0031,         None,           None,            to_string ,     bytearray() ),
+#   PanelSetting.KeyFob           : PanelSettingCodesType( None, "KeyFobsPMax",      "",                         None  ,         None  ,         None,           None,            to_string ,     bytearray()),
+#   PanelSetting.AlarmLED         : PanelSettingCodesType( None, None,               "AlarmLED",                 None  ,         None  ,         None,           None,            to_string ,     bytearray()),
+#   PanelSetting.ZoneSignal       : PanelSettingCodesType( None, "ZoneSignalPMax",   "",                         None  ,         None  ,         None,           None,            to_string ,     bytearray()),
 #   PanelSetting.PanicAlarm       : PanelSettingCodesType( 0,    "panicAlarm",       "panicAlarm",               None  ,         None  ,         None,           None,            psc_dummy,     [False]),
 #   PanelSetting.PanelModel       : PanelSettingCodesType( 0,    EPROM.PANEL_MODEL_CODE, EPROM.PANEL_MODEL_CODE, None  ,         None  ,         None,           None,            psc_lba  ,     [bytearray([0,0,0,0])]),
 

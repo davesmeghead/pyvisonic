@@ -1,8 +1,8 @@
 """Sensor."""
-from __future__ import annotations  # noqa: TID251
+from __future__ import annotations
 
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 from .py_abstract_classes import AlDeviceCommon
@@ -60,21 +60,21 @@ class AlSensorDevice(AlDeviceCommon):
 # fmt: off
 
         strn = ""
-        strn = strn + ("id=None" if self.id is None else f"id={self.id:<2}")
-        strn = strn + (" partition=None   "    if self.partition is None      else f" partition={pt:<7}")
-        strn = strn + (" bypass=- "            if self.bypass is None         else f" bypass={self.bypass:<2}")
-        strn = strn + (" batt=- "              if self.low_battery is None    else f" batt={self.low_battery:<2}")
-        strn = strn + (" stat=- "              if self.is_open is None        else f" stat={self.is_open:<2}")
-        strn = strn + (" tamp=- "              if self.tamper is None         else f" tamp={self.tamper:<2}")
-        strn = strn + (" enrol=- "             if self.enrolled is None       else f" enrol={self.enrolled:<2}")
-        strn = strn + (" trig=- "              if self.triggered is None      else f" trig={self.triggered:<2}")
-        strn = strn + (" ztamp=- "             if self.zone_tamper is None    else f" ztamp={self.zone_tamper:<2}")
-        strn = strn + (" ztrip=- "             if self.zone_trip is None      else f" ztrip={self.zone_trip:<2}")
+        strn = strn + ("id=None"               if self.id is None             else f"id={self.id:<2}") # type: ignore
+        strn = strn + (" partition=None   "    if self.partition is None      else f" partition={pt:<7}") # type: ignore
+        strn = strn + (" bypass=- "            if self.bypass is None         else f" bypass={self.bypass:<2}") # type: ignore
+        strn = strn + (" batt=- "              if self.low_battery is None    else f" batt={self.low_battery:<2}") # type: ignore
+        strn = strn + (" stat=- "              if self.is_open is None        else f" stat={self.is_open:<2}") # type: ignore
+        strn = strn + (" tamp=- "              if self.tamper is None         else f" tamp={self.tamper:<2}") # type: ignore
+        strn = strn + (" enrol=- "             if self.enrolled is None       else f" enrol={self.enrolled:<2}") # type: ignore
+        strn = strn + (" trig=- "              if self.triggered is None      else f" trig={self.triggered:<2}") # type: ignore
+        strn = strn + (" ztamp=- "             if self.zone_tamper is None    else f" ztamp={self.zone_tamper:<2}") # type: ignore
+        strn = strn + (" ztrip=- "             if self.zone_trip is None      else f" ztrip={self.zone_trip:<2}") # type: ignore
         strn = strn + (" sid=None"             if self.raw_sensor_id is None  else f" sid={self.raw_sensor_id:<3}")
-        strn = strn + (" loc=None          "   if self.zone_name is None      else f" loc={self.zone_name[:14]:<14}")
+        strn = strn + (" loc=None          "   if self.zone_name is None      else f" loc={self.zone_name[:14]:<14}") # type: ignore
         strn = strn + (" ztype=None"           if self.zone_type is None      else f" ztype={self.zone_type:<2}")
-        strn = strn + (" zname=None          " if self.zone_type_name is None else f" zname={self.zone_type_name[:10]:<10}")
-        strn = strn + (" zchime=None         " if self.zone_chime is None     else f" zchime={self.zone_chime:<13}")
+        strn = strn + (" zname=None          " if self.zone_type_name is None else f" zname={self.zone_type_name[:10]:<10}") # type: ignore
+        strn = strn + (" zchime=None         " if self.zone_chime is None     else f" zchime={self.zone_chime:<13}") # type: ignore
         strn = strn + (""                      if self.temperature is None    else f" temperature={self.temperature:<3}")
         return strn + (""                      if self.lux is None            else f" luminance={self.lux:<3}")
 
@@ -196,7 +196,7 @@ class AlSensorDevice(AlDeviceCommon):
                 log.debug("[do_trigger]        debounced trigger = %s    at time=%s", self.triggered, self.last_trigger_time )
                 self.notify(AlSensorCondition.TRIGGER)
 
-    def do_bypass(self, val: bool) -> bool:
+    def do_bypass(self, val: bool | None) -> bool:
         """Do bypass update."""
         if val is not None and self._bypass != val:
             self._bypass = val
@@ -209,7 +209,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get bypass sensor."""
         return self._bypass
 
-    def do_missing(self, val: bool) -> bool:
+    def do_missing(self, val: bool | None) -> bool:
         """Do missing update."""
         if val is not None and self._is_missing != val:
             self._is_missing = val
@@ -222,7 +222,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get missing sensor."""
         return self._is_missing
 
-    def do_inactive(self, val: bool) -> bool:
+    def do_inactive(self, val: bool | None) -> bool:
         """Do inactive update."""
         if val is not None and self._is_inactive != val:
             self._is_inactive = val
@@ -235,7 +235,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get inactive sensor."""
         return self._is_inactive
 
-    def do_oneway(self, val: bool) -> bool:
+    def do_oneway(self, val: bool | None) -> bool:
         """Do one way update."""
         if val is not None and self._is_one_way != val:
             self._is_one_way = val
@@ -248,7 +248,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get one way comms."""
         return self._is_one_way
 
-    def do_ztrip(self, val: bool) -> bool:
+    def do_ztrip(self, val: bool | None) -> bool:
         """Do zone_trip update."""
         if val is not None and self._zone_trip != val:
             self._zone_trip = val
@@ -261,7 +261,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get zone tripped."""
         return self._zone_trip
 
-    def do_ztamper(self, val: bool) -> bool:
+    def do_ztamper(self, val: bool | None) -> bool:
         """Do tamper update."""
         if val is not None and self._zone_tamper != val:
             self._zone_tamper = val
@@ -274,7 +274,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get tamper."""
         return self._zone_tamper
 
-    def do_battery(self, val: bool) -> bool:
+    def do_battery(self, val: bool | None) -> bool:
         """Do battery update."""
         if val is not None and self._low_battery != val:
             self._low_battery = val
@@ -287,7 +287,7 @@ class AlSensorDevice(AlDeviceCommon):
         """Get low battery."""
         return self._low_battery
 
-    def do_tamper(self, val: bool) -> bool:
+    def do_tamper(self, val: bool | None) -> bool:
         """Do tamper update."""
         if val is not None and self._tamper != val:
             self._tamper = val
