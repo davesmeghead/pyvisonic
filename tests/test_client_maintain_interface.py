@@ -8,8 +8,6 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import pytest
-from serialx import Parity, SerialException, StopBits, UnsupportedSetting
-
 from pyvisonic import (
     AlCondition,
     AlSensorCondition,
@@ -29,6 +27,7 @@ from pyvisonic.client_types import (
 )
 from pyvisonic.py_abstract_classes import AlPanelInterface
 from pyvisonic.py_enum import AlAlarmType, AlPanelMode, AlPanelStatus
+from serialx import Parity, SerialException, StopBits, UnsupportedSetting
 
 CLIENT_MODULE = "pyvisonic.client_maintain_interface"
 
@@ -61,23 +60,14 @@ def interface(persist_entry: MagicMock) -> MaintainInterface:
     return client
 
 
-@pytest.mark.parametrize(
-    ("baud", "baud_list"),
-    [
-        pytest.param(9600, [38400, 9600, 38400, 9600], id="9600"),
-        pytest.param(38400, [9600, 38400, 9600, 38400], id="38400"),
-    ],
-)
+@pytest.mark.parametrize("baud", [9600, 38400])
 async def test_initialise_resets_connection_state(
-    interface: MaintainInterface, baud: int, baud_list: list[int]
+    interface: MaintainInterface, baud: int
 ) -> None:
-    """Select the alternate baud first and reset the panel's startup/event state."""
+    """Start from the saved working baud and reset the panel's startup state."""
     interface.settings.baud = baud
-    interface._baud_index = 3
     interface._initialise()
     assert interface._serial_baud_rate == baud
-    assert interface._connection_baud_list == baud_list
-    assert interface._baud_index == 0
     assert interface._last_baud_rate_change_success is True
     assert interface.has_started() is False
 
@@ -215,7 +205,6 @@ async def test_startup_baud_upgrade(
     interface.settings.baud = baud
     interface._serial_baud_rate = baud
     interface._saved_baud = baud
-    interface._baud_index = 3
     interface._last_baud_rate_change_success = last_success
     previous_time = {
         None: None,
@@ -232,14 +221,14 @@ async def test_startup_baud_upgrade(
     ):
         clock.now.return_value = now
         interface.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
-    assert interface._baud_index == 0
-    assert interface._serial_baud_rate == {True: 38400, False: baud}[upgrade]
-    assert update.call_count == int(upgrade)
+    assert interface._serial_baud_rate == baud
+    assert interface.settings.baud == baud
+    assert update.call_args_list == {True: [call(38400)], False: []}[upgrade]
     assert interface.has_started() is True
     interface.callbacks.panel_change.assert_called_once_with(
         AlCondition.STARTUP_SUCCESS, None
     )
-    assert persist_entry.call_args_list == {True: [call(38400)], False: []}[upgrade]
+    persist_entry.assert_not_called()
     assert (
         interface.saved_startup_success_time
         == {True: now, False: previous_time}[timestamp_updated]

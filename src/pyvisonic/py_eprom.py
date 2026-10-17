@@ -436,7 +436,6 @@ class EPROMManager:
                     download_list.append(block)
 
         self.pm_download_complete = len(download_list) == 0
-        log.warning(f"EPROM Download list is {download_list}")
         return download_list
 
     # _saveEPROMSettings: add a certain setting to the settings table

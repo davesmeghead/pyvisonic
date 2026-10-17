@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .client_connection_test import async_test_connection
 from .client_manage_connection import ManageConnection
 from .py_enum import AlCommandStatus, AlPanelCommand, AlPanelStatus, AlSwitchCommand
 
@@ -10,6 +11,21 @@ TIME_DELTA_BETWEEN_IMAGES = 0.6
 
 class VisonicClient(ManageConnection):
     """Expose panel, bypass, switch, image and event-log commands."""
+
+    async def async_test_connection(
+        self, *, timeout: float = 5.0, attempts: int = 2
+    ) -> int | None:
+        """Probe an idle client's endpoint and return its baud, or None.
+
+        By default each baud gets two attempts, each allowing five seconds.
+        This closes the probe before returning and does not start connect().
+        Cancellation propagates after the probe has released its resources.
+        """
+        if self._management_task is not None and not self._management_task.done():
+            return None
+        return await async_test_connection(
+            self.settings, timeout=timeout, attempts=attempts
+        )
 
     def _command_status(self) -> AlCommandStatus:
         if self._visonic_protocol is None:

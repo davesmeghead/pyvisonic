@@ -34,6 +34,52 @@ from pyvisonic.py_enum import AlPanelCommand, AlPanelMode
 Connection setup and protocol callbacks are demonstrated in the included examples.
 Review these when migrating an application from version 3.
 
+## Quick connection test
+
+Before calling `connect()`, an idle `VisonicClient` can check its endpoint:
+
+```python
+baud = await client.async_test_connection(timeout=5.0, attempts=2)
+if baud is not None:
+    client.settings.baud = baud
+    client.connect()
+```
+
+The test returns the responding baud rate, or `None` when neither rate responds
+or the connection fails. It sends a status request and requires a checksum-checked
+status reply; an acknowledgement alone is insufficient. This does not establish
+authenticated control or decoded panel state.
+Serial probes try the configured baud and then the other rate (9600 or 38400)
+on each pass, changing the open port's baud without commanding the panel to
+change its baud. By default there are two passes, so a 9600-baud configuration
+tries 9600, 38400, 9600, 38400, stopping as soon as a valid reply arrives.
+TCP probes use the remote adapter's existing settings and return the configured
+baud on success; they cannot discover the adapter's actual serial baud. They
+send up to two status requests over the same connection by default.
+
+`timeout` is a positive number of seconds per attempt, including opening the
+connection or changing baud. `attempts` is a positive integer specifying the
+number of passes. The defaults allow up to twenty seconds for serial or ten
+seconds for TCP, plus up to one second for serial cleanup. Opening failures
+and disconnected transports end the probe without further requests. The probe
+always closes its connection and stops its sender. Cancellation propagates
+after cleanup. The standalone probe leaves the client's settings unchanged.
+
+Normal serial `connect()` also uses this bounded discovery before full startup.
+It starts at the saved baud, tries the alternate baud if needed, and hands the
+same open transport to the normal protocol once a status reply is verified.
+The verified baud is persisted through the existing baud-change callback.
+Short power interruptions normally retain the panel's baud; a PowerMaster may
+revert to 9600 after prolonged power loss, usually around 24 hours. No outage
+duration needs to be tracked because startup checks the responding baud.
+
+Reconnections perform discovery again. Once a PowerMaster is connected in
+Powerlink mode, a requested baud upgrade first commands the panel at its working
+baud, then reconfigures the local serial transport in place. Rejected commands
+leave the working baud unchanged. Failed local reconfiguration triggers recovery
+through discovery. The standalone connection test still closes its connection
+and leaves its settings unchanged.
+
 ## Examples
 
 Install the optional dependencies for the command line examples, Textual interface,

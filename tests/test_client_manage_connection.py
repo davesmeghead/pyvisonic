@@ -6,8 +6,6 @@ from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
-from requests import ConnectTimeout, HTTPError
-
 from pyvisonic import AlCommandStatus, AlTerminationType, PyVisonicException
 from pyvisonic.client_maintain_interface import (
     ConnectionStatus,
@@ -19,6 +17,8 @@ from pyvisonic.client_types import (
     ConnectionType,
     VisonicClientSettings,
 )
+from requests import ConnectTimeout, HTTPError
+from serialx import BaseSerialTransport, SerialException
 
 MODULE = "pyvisonic.client_manage_connection"
 
@@ -113,7 +113,7 @@ async def test_connection_manager_disconnection_restarts_transport(
     machine: tuple[ManageConnection, MagicMock, MagicMock],
 ) -> None:
     """A dropped connection closes the transport and starts a fresh attempt."""
-    client, _, timer = machine
+    client, create, timer = machine
     await run_states(
         client,
         [
@@ -121,11 +121,13 @@ async def test_connection_manager_disconnection_restarts_transport(
             ConnectionStatus.INITIAL_CREATE_TRANSPORT,
             ConnectionStatus.CONNECTED,
             ConnectionStatus.DISCONNECTED,
+            ConnectionStatus.INITIAL_CREATE_PROTOCOL,
             ConnectionStatus.INITIAL_CREATE_TRANSPORT,
             ConnectionStatus.STOP,
         ],
     )
-    assert client._async_stop_transport.await_count == 1
+    client._async_stop.assert_awaited()
+    assert create.call_count == 2
     assert client._async_create_transport.await_count == 2
     assert timer.call_count == 2
 
@@ -169,13 +171,29 @@ async def test_connection_manager_retry_transport_failure(
     assert create.call_count == 2
 
 
+@pytest.mark.parametrize(("accepted", "expected_baud"), [(True, 38400), (False, 9600)])
 async def test_connection_manager_serial_baud_change(
     machine: tuple[ManageConnection, MagicMock, MagicMock],
+    accepted: bool,
+    expected_baud: int,
 ) -> None:
-    """Cycle the serial transport after a panel baud update."""
+    """Change the panel and local baud without closing or recreating the transport."""
     client, _, _ = machine
     client.settings.connection_type = ConnectionType.SERIAL
-    client._send_baud_change_to_panel = AsyncMock(return_value=True)
+    client._send_baud_change_to_panel = AsyncMock(return_value=accepted)
+    transport = MagicMock(spec=BaseSerialTransport)
+    calls = MagicMock()
+    calls.attach_mock(client._send_baud_change_to_panel, "panel_command")
+    calls.attach_mock(transport.flush, "flush")
+    calls.attach_mock(transport.reconfigure_port, "reconfigure")
+    saved = client.callbacks.baud_change = MagicMock()
+    calls.attach_mock(saved, "saved")
+
+    def attach_transport() -> bool:
+        client._client_vis_protocol = MagicMock(transport=transport)
+        return True
+
+    client._async_create_transport.side_effect = attach_transport
     await run_states(
         client,
         [
@@ -183,12 +201,65 @@ async def test_connection_manager_serial_baud_change(
             ConnectionStatus.INITIAL_CREATE_TRANSPORT,
             ConnectionStatus.CONNECTED,
             ConnectionStatus.BAUD_CHANGE,
-            ConnectionStatus.INITIAL_CREATE_TRANSPORT,
+            ConnectionStatus.NO_OPERATION,
             ConnectionStatus.STOP,
         ],
     )
-    client._send_baud_change_to_panel.assert_awaited_once_with(client._serial_baud_rate)
-    assert client._async_stop_transport.await_count == 1
+    client._send_baud_change_to_panel.assert_awaited_once_with(38400)
+    assert (
+        calls.mock_calls
+        == {
+            True: [
+                call.panel_command(38400),
+                call.flush(),
+                call.reconfigure(baudrate=38400),
+                call.saved(38400),
+            ],
+            False: [call.panel_command(38400)],
+        }[accepted]
+    )
+    client._async_stop_transport.assert_not_awaited()
+    client._async_create_transport.assert_awaited_once()
+    assert client.settings.baud == expected_baud
+    assert client._last_baud_rate_change_success is accepted
+
+
+@pytest.mark.parametrize("operation", ["flush", "reconfigure_port"])
+async def test_serial_baud_change_transport_failure(
+    machine: tuple[ManageConnection, MagicMock, MagicMock], operation: str
+) -> None:
+    """Rediscover the baud if local reconfiguration fails after the panel command."""
+    client, _, _ = machine
+    client.settings.connection_type = ConnectionType.SERIAL
+    client._send_baud_change_to_panel = AsyncMock(return_value=True)
+    transport = MagicMock(spec=BaseSerialTransport)
+    getattr(transport, operation).side_effect = SerialException("port failed")
+    saved = client.callbacks.baud_change = MagicMock()
+
+    def attach_transport() -> bool:
+        client._client_vis_protocol = MagicMock(transport=transport)
+        return True
+
+    client._async_create_transport.side_effect = attach_transport
+    with patch.object(
+        client, "_kick_off_next_step", wraps=client._kick_off_next_step
+    ) as request:
+        await run_states(
+            client,
+            [
+                ConnectionStatus.INITIAL_CREATE_PROTOCOL,
+                ConnectionStatus.INITIAL_CREATE_TRANSPORT,
+                ConnectionStatus.CONNECTED,
+                ConnectionStatus.BAUD_CHANGE,
+                ConnectionStatus.RESTART,
+                ConnectionStatus.INITIAL_CREATE_PROTOCOL,
+                ConnectionStatus.STOP,
+            ],
+        )
+    assert call(ConnectionStatus.RESTART) in request.call_args_list
+    assert client.settings.baud == 9600
+    assert client._last_baud_rate_change_success is False
+    saved.assert_not_called()
 
 
 async def test_connection_manager_unsupported_baud_device(
@@ -260,11 +331,16 @@ async def test_transport_protocol_and_listener_helpers(
         assert await client._async_create_transport()
         create_tcp.assert_awaited_once()
     client.settings.connection_type = ConnectionType.SERIAL
-    with patch.object(
-        client, "async_create_serial_client", new_callable=AsyncMock
+    with patch(
+        f"{MODULE}.async_open_connection", new_callable=AsyncMock
     ) as create_serial:
+        connection = MagicMock()
+        create_serial.return_value = (38400, connection)
         assert await client._async_create_transport()
         create_serial.assert_awaited_once()
+        connection.replace_protocol.assert_called_once()
+        assert client._client_vis_protocol is connection
+        assert client.settings.baud == 38400
     client.settings.connection_type = "other"
     assert not await client._async_create_transport()
 
@@ -346,7 +422,7 @@ async def test_panel_problem_selects_reconnect_state(client: ManageConnection) -
     client.settings.retry_count = 3
     client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
     assert client._requested_state == ConnectionStatus.BAUD_CHANGE_RESET_PROTOCOL
-    client._baud_index = len(client._connection_baud_list)
+    assert client._serial_baud_rate == 9600
     client.on_panel_problem(AlTerminationType.CRC_ERROR)
     assert client._requested_state == ConnectionStatus.RESTART
     client.settings.retry_count = 0
@@ -423,7 +499,6 @@ async def test_connection_manager_baud_reset_and_invalid_device(
     """Recreate the protocol on serial reset and ignore unsupported device types."""
     client, create, _ = machine
     client.settings.connection_type = ConnectionType.SERIAL
-    client._baud_index = len(client._connection_baud_list)
     await run_states(
         client,
         [
@@ -436,7 +511,7 @@ async def test_connection_manager_baud_reset_and_invalid_device(
         ],
     )
     assert create.call_count == 2
-    assert client._baud_index == 0
+    assert client._serial_baud_rate == 9600
 
 
 async def test_close_connection_from_pending(

@@ -2,8 +2,12 @@
 
 import asyncio
 import contextlib
+from dataclasses import replace
 from typing import override
 
+from serialx import BaseSerialTransport, SerialException
+
+from .client_connection_test import async_close_transport, async_open_connection
 from .client_maintain_interface import ConnectionStatus, MaintainInterface
 from .client_types import ConnectionType, VisonicClientCallbacks, VisonicClientSettings
 from .py_enum import AlCommandStatus, AlTerminationType
@@ -27,6 +31,7 @@ class ManageConnection(MaintainInterface):
         self._client_vis_protocol: VisonicProtocolClient | None = None
         self._max_connection_attempts = settings.retry_count
         self._last_baud_rate_change_success = True
+        self._requested_baud_rate = 38400
         self._system_started = False
         self.panel_disconnection_counter = 0
         super().__init__(settings, callbacks)
@@ -95,12 +100,25 @@ class ManageConnection(MaintainInterface):
                     )
                     return True
                 case ConnectionType.SERIAL:
-                    path = self.settings.path
-                    await self.async_create_serial_client(
-                        connection_status_callback=self.connection_status_callback,
-                        vp=self._visonic_protocol,
-                        path=path,
-                        baud=self._serial_baud_rate,
+                    result = await async_open_connection(
+                        replace(self.settings, baud=self._serial_baud_rate)
+                    )
+                    if result is None:
+                        self.connection_status_callback(
+                            ConnectionStatus.NO_CONNECTION_MADE
+                        )
+                        return False
+                    baud, connection = result
+                    self._client_vis_protocol = connection
+                    connection.replace_protocol(
+                        self._visonic_protocol,
+                        lambda: self.connection_status_callback(
+                            ConnectionStatus.DISCONNECTED
+                        ),
+                    )
+                    self.save_working_baud(baud)
+                    self.connection_status_callback(
+                        ConnectionStatus.CONNECTED, connection
                     )
                     return True
                 case _:
@@ -124,8 +142,7 @@ class ManageConnection(MaintainInterface):
         """Stop the transport connection."""
         if self._client_vis_protocol is not None:
             self.logger.debug("Shutting down Visonic Transport")
-            self._client_vis_protocol.close()
-            await asyncio.sleep(0.0)
+            await async_close_transport(self._client_vis_protocol)
         self._client_vis_protocol = None
 
     def _kick_off_next_step(self, command: ConnectionStatus) -> None:
@@ -158,8 +175,9 @@ class ManageConnection(MaintainInterface):
         await self._async_stop_protocol()
 
     @override
-    def update_baud(self) -> None:
+    def update_baud(self, baud: int = 38400) -> None:
         """Set the baud rate."""
+        self._requested_baud_rate = baud
         self._kick_off_next_step(ConnectionStatus.BAUD_CHANGE)
 
     async def async_restart(self, force: bool = False) -> None:
@@ -246,7 +264,6 @@ class ManageConnection(MaintainInterface):
             },
             ConnectionStatus.BAUD_CHANGE: {
                 ConnectionStatus.NO_OPERATION,
-                ConnectionStatus.INITIAL_CREATE_TRANSPORT,
             },
             ConnectionStatus.CLOSE_CONNECTION: {ConnectionStatus.READY_TO_START},
             ConnectionStatus.RETRY_CREATE_TRANSPORT: {
@@ -301,10 +318,10 @@ class ManageConnection(MaintainInterface):
 
                     case ConnectionStatus.DISCONNECTED:
                         self.panel_disconnection_counter += 1
-                        await self._async_stop_transport()
+                        await self._async_stop()
                         await asyncio.sleep(1.0)
                         self._kick_off_next_step(
-                            ConnectionStatus.INITIAL_CREATE_TRANSPORT
+                            ConnectionStatus.INITIAL_CREATE_PROTOCOL
                         )
 
                     case ConnectionStatus.NO_CONNECTION_MADE:
@@ -340,50 +357,56 @@ class ManageConnection(MaintainInterface):
                         elif await self._async_create_transport():
                             create_timer()
                         else:
-                            self._kick_off_next_step(ConnectionStatus.READY_TO_START)
+                            self._kick_off_next_step(
+                                ConnectionStatus.NO_CONNECTION_MADE
+                            )
 
-                    case (
-                        ConnectionStatus.BAUD_CHANGE
-                        | ConnectionStatus.BAUD_CHANGE_RESET_PROTOCOL
-                    ):
-                        self.logger.debug("Setting Baud %s", self._serial_baud_rate)
-                        if self._baud_index >= len(self._connection_baud_list):
-                            self.logger.debug("    Reset Baud Selection List")
-                            self.reset_baud_list()
+                    case ConnectionStatus.BAUD_CHANGE_RESET_PROTOCOL:
+                        await self._async_stop()
+                        self._kick_off_next_step(
+                            ConnectionStatus.INITIAL_CREATE_PROTOCOL
+                        )
 
+                    case ConnectionStatus.BAUD_CHANGE:
+                        baud = self._requested_baud_rate
+                        self.logger.debug("Setting Baud %s", baud)
                         self._last_baud_rate_change_success = False
 
                         if device_type == ConnectionType.ETHERNET:
                             if self.callbacks.transport_baud_change is not None:
                                 self._last_baud_rate_change_success = (
-                                    await self._send_baud_change_to_panel(
-                                        self._serial_baud_rate
-                                    )
+                                    await self._send_baud_change_to_panel(baud)
                                 )
                                 if self._last_baud_rate_change_success:
-                                    await self.callbacks.transport_baud_change(
-                                        self._serial_baud_rate
-                                    )
+                                    await self.callbacks.transport_baud_change(baud)
+                                    self.save_working_baud(baud)
                             self._kick_off_next_step(ConnectionStatus.NO_OPERATION)
 
                         elif device_type == ConnectionType.SERIAL:
-                            self._last_baud_rate_change_success = (
-                                await self._send_baud_change_to_panel(
-                                    self._serial_baud_rate
-                                )
+                            transport = (
+                                self._client_vis_protocol.transport
+                                if self._client_vis_protocol is not None
+                                else None
                             )
-                            await self._async_stop_transport()
-                            if (
-                                current_state
-                                == ConnectionStatus.BAUD_CHANGE_RESET_PROTOCOL
-                            ):
-                                self._kick_off_next_step(
-                                    ConnectionStatus.INITIAL_CREATE_PROTOCOL
-                                )
-                            else:
-                                self._kick_off_next_step(
-                                    ConnectionStatus.INITIAL_CREATE_TRANSPORT
-                                )
+                            if not isinstance(transport, BaseSerialTransport):
+                                self._kick_off_next_step(ConnectionStatus.RESTART)
+                                continue
+                            self._last_baud_rate_change_success = (
+                                await self._send_baud_change_to_panel(baud)
+                            )
+                            if self._last_baud_rate_change_success:
+                                try:
+                                    await transport.flush()
+                                    await transport.reconfigure_port(baudrate=baud)
+                                except (OSError, SerialException) as err:
+                                    self._last_baud_rate_change_success = False
+                                    self.logger.warning(
+                                        "Serial baud change failed: %s", err
+                                    )
+                                    self._kick_off_next_step(ConnectionStatus.RESTART)
+                                    continue
+                                self.save_working_baud(baud)
+                            self._kick_off_next_step(ConnectionStatus.NO_OPERATION)
                         else:
                             self.logger.debug(
                                 "    Incorrect device type %s, baud not updated!",
@@ -417,18 +440,20 @@ class ManageConnection(MaintainInterface):
         self._notify_state_changed()
 
         device_type = self.settings.connection_type
-        if (
+        if self._max_connection_attempts == 0:
+            self.logger.debug(
+                "User config explicitly prevents any reconnection attempts, stopping the connection"
+            )
+            self._kick_off_next_step(ConnectionStatus.STOP)
+        elif (
             device_type == ConnectionType.SERIAL
             and self._visonic_protocol is not None
-            and self._baud_index < len(self._connection_baud_list)
             and termination
             in [
                 AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED,
                 AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED,
             ]
         ):
-            self._serial_baud_rate = self._connection_baud_list[self._baud_index]
-            self._baud_index += 1
             self._kick_off_next_step(ConnectionStatus.BAUD_CHANGE_RESET_PROTOCOL)
 
             reason = (
@@ -437,15 +462,10 @@ class ManageConnection(MaintainInterface):
                 else "never connected"
             )
             self.logger.debug(
-                "No data from panel (%s) so try a different baud rate %s",
+                "No data from panel (%s), rediscovering from saved baud %s",
                 reason,
                 self._serial_baud_rate,
             )
 
-        elif self._max_connection_attempts == 0:
-            self.logger.debug(
-                "User config explicitly prevents any reconnection attempts, stopping the connection"
-            )
-            self._kick_off_next_step(ConnectionStatus.STOP)
         else:
             self._kick_off_next_step(ConnectionStatus.RESTART)

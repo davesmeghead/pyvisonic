@@ -56,7 +56,6 @@ class MaintainInterface:
         self._saved_baud = settings.baud
         self.saved_startup_success_time: datetime | None = None
         self._last_achieved_powerlink = False
-        self._baud_index: int = 0
         self._system_started = False
         self._last_baud_rate_change_success = True
         self.connection_lock = asyncio.Lock()
@@ -68,18 +67,8 @@ class MaintainInterface:
     def _initialise(self) -> None:
         """Reset protocol startup and baud negotiation state."""
         self._serial_baud_rate = self.settings.baud
-        self._connection_baud_list = (
-            [38400, 9600, 38400, 9600]
-            if self._serial_baud_rate == 9600
-            else [9600, 38400, 9600, 38400]
-        )
-        self._baud_index = 0
         self._last_baud_rate_change_success = True
         self._system_started = False
-
-    def reset_baud_list(self) -> None:
-        """Reset the baud list to the default."""
-        self._baud_index = 0
 
     def get_partitions_in_use(self) -> set[int] | None:
         """Get the set of partitions in use."""
@@ -197,7 +186,7 @@ class MaintainInterface:
         else:
             return is_connected
 
-    def update_baud(self) -> None:
+    def update_baud(self, baud: int = 38400) -> None:
         """Update baud, to be overridden."""
         raise NotImplementedError
 
@@ -207,7 +196,6 @@ class MaintainInterface:
         """Maintain startup state and forward raw protocol events."""
         if event_id == AlCondition.STARTUP_SUCCESS:
             self._system_started = True
-            self.reset_baud_list()
             if (
                 self._serial_baud_rate == 9600
                 and self.is_power_master()
@@ -223,8 +211,7 @@ class MaintainInterface:
                         "Repeated startup after failed baud change; keeping 9600"
                     )
                 else:
-                    self._serial_baud_rate = 38400
-                    self.update_baud()
+                    self.update_baud(38400)
                 self.saved_startup_success_time = now
         self.save_working_baud(self._serial_baud_rate)
         if self.callbacks.panel_change is not None:
@@ -391,7 +378,7 @@ class MaintainInterface:
                         ),
                         sock=sock,
                     )
-                    if connection_status_callback is not None and cvp is not None: # type: ignore
+                    if connection_status_callback is not None and cvp is not None:
                         connection_status_callback(ConnectionStatus.CONNECTED, cvp)
                     return cvp
             except (TimeoutError, OSError) as ex:

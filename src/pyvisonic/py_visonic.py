@@ -20,14 +20,14 @@ from copy import deepcopy
 from typing import Any, ClassVar
 
 from .py_const import (
-    LIBRARY_VERSION,
+    # LIBRARY_VERSION,
     MAX_PARTITIONS,
     NOBYPASSSTR,
     TEXT_DL_MESSAGE_RETRIES,
     TEXT_DOWNLOAD_TIMEOUT,
     TEXT_PANEL_MODEL,
     TEXT_POWER_MASTER,
-    TEXT_PROTOCOL_VERSION,
+    # TEXT_PROTOCOL_VERSION,
     TEXT_WATCHDOG_TIMEOUT_DAY,
     TEXT_WATCHDOG_TIMEOUT_TOTAL,
 )
@@ -171,7 +171,7 @@ class VisonicProtocol(MessageHandling):
         # Take a deepcopy of the panel data and then add to it
         a: dict[str, Any] = deepcopy(self.partition_state[0].get_panel_data())
         a |= get_panel_fixed_dict()
-        a |= { TEXT_PROTOCOL_VERSION: LIBRARY_VERSION,
+        a |= { # TEXT_PROTOCOL_VERSION: LIBRARY_VERSION,
               "emulationmode": self.panel_mode.name.lower(),
               TEXT_WATCHDOG_TIMEOUT_TOTAL: self.watchdog_timeout_counter,
               TEXT_WATCHDOG_TIMEOUT_DAY: self.watchdog_timeout_past_day

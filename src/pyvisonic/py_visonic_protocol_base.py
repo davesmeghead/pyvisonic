@@ -23,6 +23,7 @@ from .py_const import (
     OBFUS,
     PACKET_MAX_SIZE,
     SAME_PACKET_ERROR,
+    TEXT_PROTOCOL_VERSION,
     DebugLevel,
 )
 from .py_device import AlGenericDevice
@@ -117,7 +118,7 @@ class vloggerclass:
 class ProtocolBase(AlPanelInterface, MyChecksumCalc):
     """Manage low level Visonic protocol."""
 
-    log.debug(f"Initialising Protocol - Protocol Version {LIBRARY_VERSION}")
+    log.debug(f"Initialising Protocol - {TEXT_PROTOCOL_VERSION} {LIBRARY_VERSION}")
 
     def __init__(self, loop: asyncio.AbstractEventLoop, force_standard_mode : bool, disable_all_commands : bool, download_code : str | None, user_code_slot: int, logger: logging.Logger | None = None) -> None:
         """Initialize class."""
