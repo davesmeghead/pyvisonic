@@ -4,12 +4,12 @@ from collections.abc import AsyncGenerator
 from unittest.mock import MagicMock, call
 
 import pytest
-
 from pyvisonic import (
     AlCommandStatus,
     AlPanelCommand,
     AlPanelStatus,
     AlSwitchCommand,
+    AlTerminationType,
     ConnectionType,
     VisonicClient,
     VisonicClientSettings,
@@ -163,5 +163,18 @@ def test_client_panel_status(client: VisonicClient, extended: bool) -> None:
     client._protocol.get_panel_status_dict.return_value = attributes
     state = client.get_panel_status_dict(extended)
     assert state == attributes
+    assert attributes == {"emulationmode": "Powerlink", "tamper": False}
     assert state is not attributes
     client._protocol.get_panel_status_dict.assert_called_once_with(extended)
+
+
+def test_disconnection_count_property(client: VisonicClient) -> None:
+    """Expose a read-only count without requiring a live protocol."""
+    client._visonic_protocol = None
+    assert client.disconnection_count == 0
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
+    assert client.disconnection_count == 1
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
+    assert client.disconnection_count == 1
+    with pytest.raises(AttributeError):
+        setattr(client, "disconnection_count", 5)

@@ -12,6 +12,11 @@ TIME_DELTA_BETWEEN_IMAGES = 0.6
 class VisonicClient(ManageConnection):
     """Expose panel, bypass, switch, image and event-log commands."""
 
+    @property
+    def disconnection_count(self) -> int:
+        """Return the number of panel disconnections during this client's lifetime."""
+        return self.panel_disconnection_counter
+
     async def async_test_connection(
         self, *, timeout: float = 5.0, attempts: int = 2
     ) -> int | None:

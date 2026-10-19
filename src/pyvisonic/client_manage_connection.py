@@ -34,6 +34,7 @@ class ManageConnection(MaintainInterface):
         self._requested_baud_rate = 38400
         self._system_started = False
         self.panel_disconnection_counter = 0
+        self._disconnection_counted = False
         super().__init__(settings, callbacks)
 
     @override
@@ -154,10 +155,20 @@ class ManageConnection(MaintainInterface):
         self, state: ConnectionStatus, cvp: VisonicProtocolClient | None = None
     ) -> None:
         """Callback from protocol CVP to handle connections and disconnections."""
+        if state == ConnectionStatus.CONNECTED:
+            self._disconnection_counted = False
+        elif state == ConnectionStatus.DISCONNECTED:
+            self._record_disconnection()
         self._client_vis_protocol = (
             cvp if state == ConnectionStatus.CONNECTED and cvp is not None else None
         )
         self._kick_off_next_step(ConnectionStatus(state))
+
+    def _record_disconnection(self) -> None:
+        """Count overlapping failure notifications once until reconnection."""
+        if not self._disconnection_counted:
+            self.panel_disconnection_counter += 1
+            self._disconnection_counted = True
 
     def connect(self) -> bool:
         """Connect to the alarm panel using the pyvisonic library."""
@@ -317,7 +328,6 @@ class ManageConnection(MaintainInterface):
                         )
 
                     case ConnectionStatus.DISCONNECTED:
-                        self.panel_disconnection_counter += 1
                         await self._async_stop()
                         await asyncio.sleep(1.0)
                         self._kick_off_next_step(
@@ -431,6 +441,8 @@ class ManageConnection(MaintainInterface):
     def on_panel_problem(self, termination: AlTerminationType) -> None:
         """Problem Callback for connection disruption to the panel."""
 
+        if termination == AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED:
+            self._record_disconnection()
         self._max_connection_attempts = int(self.settings.retry_count)
         self.logger.warning(
             "Visonic has responded to a disconnection, termination=%s", termination

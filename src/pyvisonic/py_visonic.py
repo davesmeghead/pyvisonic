@@ -357,7 +357,7 @@ class VisonicProtocol(MessageHandling):
             checksum = self._calculate_crc(pmaster_data)   # returns a bytearray with a single byte
             to_send = bytearray([Packet.HEADER]) + pmaster_data + checksum + bytearray([Packet.FOOTER])
 
-            log.debug(f"[_createBypassB0Message] Returning {to_string(to_send)}")
+            #log.debug(f"[_createBypassB0Message] Returning {to_string(to_send)}")
             return to_send
 
         if self.pm_download_mode:

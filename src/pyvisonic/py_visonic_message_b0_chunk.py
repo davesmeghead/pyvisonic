@@ -703,7 +703,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                                     part = self.sensor_list[dev].partition
                                     for p in part:
                                         log.debug(f"[handle_msgtypeB0]             Zone {dev+1}  partition,{p=}    {ev.name=}")
-                                        self.partition_state[p-1].update_panel_state(ev, self.sensor_list[dev])
+                                        self.partition_state[p].update_panel_state(ev, self.sensor_list[dev])
                                 else:
                                     # partitions not in use
                                     log.debug(f"[handle_msgtypeB0]             Zone {dev+1}   {ev.name=}")

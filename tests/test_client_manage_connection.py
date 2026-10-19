@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -21,6 +21,16 @@ from requests import ConnectTimeout, HTTPError
 from serialx import BaseSerialTransport, SerialException
 
 MODULE = "pyvisonic.client_manage_connection"
+
+
+def report_panel_silence(client: ManageConnection) -> None:
+    """Report an established panel that has stopped sending data."""
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
+
+
+def report_transport_disconnection(client: ManageConnection) -> None:
+    """Report a lost serial or network transport."""
+    client.connection_status_callback(ConnectionStatus.DISCONNECTED)
 
 
 @pytest.fixture
@@ -428,6 +438,56 @@ async def test_panel_problem_selects_reconnect_state(client: ManageConnection) -
     client.settings.retry_count = 0
     client.on_panel_problem(AlTerminationType.EXTERNAL_TERMINATION)
     assert client._requested_state == ConnectionStatus.STOP
+
+
+@pytest.mark.parametrize("connection_type", list(ConnectionType))
+@pytest.mark.parametrize("retry_count", [0, 3])
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        pytest.param(
+            report_panel_silence, report_transport_disconnection, id="silence-first"
+        ),
+        pytest.param(
+            report_transport_disconnection, report_panel_silence, id="transport-first"
+        ),
+    ],
+)
+async def test_disconnection_counted_once_until_reconnected(
+    client: ManageConnection,
+    connection_type: ConnectionType,
+    retry_count: int,
+    first: Callable[[ManageConnection], None],
+    second: Callable[[ManageConnection], None],
+) -> None:
+    """Overlapping failures count once, retries preserve the guard, recovery resets it."""
+    client.settings.connection_type = connection_type
+    client.settings.retry_count = retry_count
+    client.connection_status_callback(ConnectionStatus.CONNECTED, MagicMock())
+    first(client)
+    second(client)
+    second(client)
+    assert client.panel_disconnection_counter == 1
+
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
+    client.connection_status_callback(ConnectionStatus.NO_CONNECTION_MADE)
+    first(client)
+    assert client.panel_disconnection_counter == 1
+
+    client.connection_status_callback(ConnectionStatus.CONNECTED, MagicMock())
+    first(client)
+    second(client)
+    assert client.panel_disconnection_counter == 2
+
+
+async def test_failed_startup_does_not_count_as_disconnection(
+    client: ManageConnection,
+) -> None:
+    """Initial connection failures do not increment the outage counter."""
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
+    client.connection_status_callback(ConnectionStatus.NO_CONNECTION_MADE)
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
+    assert client.panel_disconnection_counter == 0
 
 
 @pytest.mark.parametrize(

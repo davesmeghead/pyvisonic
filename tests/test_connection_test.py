@@ -470,11 +470,13 @@ async def test_serial_recovery_discovers_current_baud(
             client.connect()
             await asyncio.wait_for(connected.wait(), timeout=1)
             old_panel = client._protocol
+            assert client.panel_disconnection_counter == 0
             connected.clear()
             transport.working_baud = working_after
             disrupt(client)
             await asyncio.wait_for(connected.wait(), timeout=3)
             assert factory.await_count == 2
+            assert client.panel_disconnection_counter == 1
             assert transport.requests == requests
             assert client.settings.baud == working_after
             assert [args.args[0] for args in saved_baud.call_args_list] == saved_calls
@@ -485,6 +487,7 @@ async def test_serial_recovery_discovers_current_baud(
         finally:
             await client.async_panel_stop()
     assert transport.close.call_count == closed + 1
+    assert client.panel_disconnection_counter == 1
     assert not VisonicProtocolClient.connections()
 
 
