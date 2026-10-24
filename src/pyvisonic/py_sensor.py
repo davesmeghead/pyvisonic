@@ -60,21 +60,21 @@ class AlSensorDevice(AlDeviceCommon):
 # fmt: off
 
         strn = ""
-        strn = strn + ("id=None"               if self.id is None             else f"id={self.id:<2}") # type: ignore
-        strn = strn + (" partition=None   "    if self.partition is None      else f" partition={pt:<7}") # type: ignore
-        strn = strn + (" bypass=- "            if self.bypass is None         else f" bypass={self.bypass:<2}") # type: ignore
-        strn = strn + (" batt=- "              if self.low_battery is None    else f" batt={self.low_battery:<2}") # type: ignore
-        strn = strn + (" stat=- "              if self.is_open is None        else f" stat={self.is_open:<2}") # type: ignore
-        strn = strn + (" tamp=- "              if self.tamper is None         else f" tamp={self.tamper:<2}") # type: ignore
-        strn = strn + (" enrol=- "             if self.enrolled is None       else f" enrol={self.enrolled:<2}") # type: ignore
-        strn = strn + (" trig=- "              if self.triggered is None      else f" trig={self.triggered:<2}") # type: ignore
-        strn = strn + (" ztamp=- "             if self.zone_tamper is None    else f" ztamp={self.zone_tamper:<2}") # type: ignore
-        strn = strn + (" ztrip=- "             if self.zone_trip is None      else f" ztrip={self.zone_trip:<2}") # type: ignore
+        strn = strn + f"id={self.id:<2}"
+        strn = strn + f" partition={pt:<7}"
+        strn = strn + f" bypass={self.bypass:<2}"
+        strn = strn + f" batt={self.low_battery:<2}"
+        strn = strn + (" stat=- "              if self.is_open is None        else f" stat={self.is_open:<2}")
+        strn = strn + f" tamp={self.tamper:<2}"
+        strn = strn + f" enrol={self.enrolled:<2}"
+        strn = strn + f" trig={self.triggered:<2}"
+        strn = strn + f" ztamp={self.zone_tamper:<2}"
+        strn = strn + f" ztrip={self.zone_trip:<2}"
         strn = strn + (" sid=None"             if self.raw_sensor_id is None  else f" sid={self.raw_sensor_id:<3}")
-        strn = strn + (" loc=None          "   if self.zone_name is None      else f" loc={self.zone_name[:14]:<14}") # type: ignore
+        strn = strn + f" loc={self.zone_name[:14]:<14}"
         strn = strn + (" ztype=None"           if self.zone_type is None      else f" ztype={self.zone_type:<2}")
-        strn = strn + (" zname=None          " if self.zone_type_name is None else f" zname={self.zone_type_name[:10]:<10}") # type: ignore
-        strn = strn + (" zchime=None         " if self.zone_chime is None     else f" zchime={self.zone_chime:<13}") # type: ignore
+        strn = strn + f" zname={self.zone_type_name[:10]:<10}"
+        strn = strn + f" zchime={self.zone_chime:<13}"
         strn = strn + (""                      if self.temperature is None    else f" temperature={self.temperature:<3}")
         return strn + (""                      if self.lux is None            else f" luminance={self.lux:<3}")
 

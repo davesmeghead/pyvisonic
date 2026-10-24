@@ -499,34 +499,6 @@ async def test_tcp_success_without_status_callback(
 
 
 @pytest.mark.asyncio
-async def test_tcp_connection_without_protocol(
-    interface: MaintainInterface,
-) -> None:
-    """Return no protocol when asyncio cannot create a protocol client."""
-    callback = Mock()
-    sock = Mock()
-    loop = MagicMock()
-    loop.create_connection = AsyncMock(return_value=(Mock(), None))
-    with (
-        patch.object(
-            client_maintain_interface.asyncio,
-            "to_thread",
-            new=AsyncMock(return_value=sock),
-        ),
-        patch.object(
-            client_maintain_interface.asyncio, "get_running_loop", return_value=loop
-        ),
-    ):
-        result = await interface.async_create_tcp_client(
-            callback, Mock(), "192.0.2.1", 5001
-        )
-
-    assert result is None
-    loop.create_connection.assert_awaited_once()
-    callback.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_tcp_failure_without_status_callback(
     interface: MaintainInterface,
 ) -> None:

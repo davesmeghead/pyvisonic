@@ -156,7 +156,7 @@ class AlPanelInterface(AlPanelDataStream):
         """Get jpg image."""
 
     @abstractmethod
-    def get_sensor_bypass_state(self) -> None:
+    def get_sensor_bypass_state(self) -> AlCommandStatus:
         """Request a sensor bypass state update."""
 
     @abstractmethod

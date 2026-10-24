@@ -152,7 +152,7 @@ class MessageHandlingBase(Sequencer):
             else:
                 # overwrite as current length is same as or more than new data
                 #log.debug(f"[_update_panel_setting]              {key=}  overwrite")
-                tmp_list = [False] * (length*8)
+                tmp_list = list(psc.data)
                 for i in range(length):
                     for j in range(8):  # 8 bits in a byte
                         tmp_list[(i*8)+j] = bool((data[i] & (1 << j)) != 0)

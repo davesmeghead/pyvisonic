@@ -1,8 +1,9 @@
 """Panel settings."""
 import logging
+from collections.abc import Buffer, Iterable
 from dataclasses import dataclass
 from numbers import Number
-from typing import Any, Final, NamedTuple
+from typing import Any, Final, NamedTuple, SupportsIndex, cast
 
 from .py_const import NOBYPASSSTR
 from .py_enum import EPROM, B0SubType, EventType, IndexName, PanelSetting
@@ -64,13 +65,14 @@ class PanelSettingCodesType[T]:
                 if value == 255:
                     # 255 seems to indicate INVALID
                     return
-                self._data = bool(value)  # type: ignore[assignment]
+                self._data = cast(T, bool(value))
                 self.isvalid = True
             elif isinstance(self._data, bytearray):
-                self._data = bytearray(value)  # type: ignore[arg-type, call-overload]
+                source = cast(Buffer | SupportsIndex | Iterable[SupportsIndex], value)
+                self._data = cast(T, bytearray(source))
                 self.isvalid = True
             elif isinstance(self._data, list):
-                self._data = list(value)  # type: ignore[arg-type, call-overload]
+                self._data = cast(T, list(cast(Iterable[object], value)))
                 self.isvalid = True
             else:
                 raise TypeError
@@ -78,8 +80,8 @@ class PanelSettingCodesType[T]:
             log.warning(
                 "Invalid data type %s for %s (expected %s)",
                 type(value).__name__,
-                self._data, # type: ignore
-                type(self._data).__name__, # type: ignore
+                self._data,
+                type(self._data).__name__,
             )
             # Do it anyway to save the data
             self._data = value
@@ -98,8 +100,8 @@ class PanelSettingCodesType[T]:
             raise IndexError(
                 f"Offset {offset} out of range for {self.__class__.__name__}"
             )
-        assert isinstance(self._data[offset], int) # type: ignore
-        self._data[offset] = value # type: ignore
+        assert isinstance(self._data[offset], int)
+        self._data[offset] = value
 
     def set_bool(self, offset: int, value: bool) -> None:
         """Set the panel setting data."""
@@ -109,8 +111,8 @@ class PanelSettingCodesType[T]:
             raise IndexError(
                 f"Offset {offset} out of range for {self.__class__.__name__}"
             )
-        assert isinstance(self._data[offset], bool) # type: ignore
-        self._data[offset] = value # type: ignore
+        assert isinstance(self._data[offset], bool)
+        self._data[offset] = value
 
     def _get(self, item: int = 0) -> str | int | bool:
         """Get an element from the panel setting data."""
@@ -123,7 +125,7 @@ class PanelSettingCodesType[T]:
             return self._data
 
         assert isinstance(self._data, (list, bytearray))
-        return self._data[item] # type: ignore
+        return self._data[item]
 
     def get_str(self, item: int = 0) -> str:
         """Get a string element from the panel setting data."""
@@ -152,19 +154,19 @@ class PanelSettingCodesType[T]:
             return self._data
         if isinstance(self._data, bytearray):
             return to_string(self._data)
-        if isinstance(self._data, list) and len(self._data) > 0 and isinstance(self._data[0], bytearray): # type: ignore
+        if isinstance(self._data, list) and len(self._data) > 0 and isinstance(self._data[0], bytearray):
             s: str = ""
-            for i in range(len(self._data)): # type: ignore
-                s = s + "(" + to_string(self._data[i]) + ")" # type: ignore
+            for i in range(len(self._data)):
+                s = s + "(" + to_string(self._data[i]) + ")"
             return s
-        return str(self._data) # type: ignore
+        return str(self._data)
 
     def length(self) -> int:
         """Return the length of the panel setting data."""
         if isinstance(self._data, (str, Number)):
             return 1
         if isinstance(self._data, (list, bytearray)):
-            return len(self._data) # type: ignore
+            return len(self._data)
         log.warning("Unknown type for panel setting data: %s", type(self._data).__name__)
         return 0
 

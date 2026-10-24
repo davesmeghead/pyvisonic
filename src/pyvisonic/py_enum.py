@@ -380,6 +380,7 @@ class EPROM(Enum):
     ZONE_DEL_MAS = auto()
     SIRENS_MAS = auto()
     KEYPAD_MAS = auto()
+    KEYFOB_MAS = auto()
     # SWITCH
     SWITCH_LOCKOUT = auto()
     SWITCH_HOUSECODE = auto()
@@ -493,6 +494,7 @@ class AlCommandStatus(IntEnum):
     FAIL_ABSTRACT_CLASS_NOT_IMPLEMENTED = 8
     FAIL_PANEL_NO_CONNECTION = 9
     FAIL_ENTITY_INCORRECT = 10
+    FAIL_RECOVERY_IN_PROGRESS = 12
 
 # This is used to update the HA frontend and send out an HA Event
 #   Only 1 to 14 are output to HA as events.
@@ -556,6 +558,8 @@ class AlTerminationType(IntEnum):
     SAME_PACKET_ERROR = 4
     EXTERNAL_TERMINATION = 5
     NO_POWERLINK_FOR_PERIOD = 6
+    FLOOD_RECOVERY_COMPLETE = 8
+    FLOOD_RECOVERY_FAILED = 9
 
 # The set of panel modes
 class AlPanelMode(IntEnum):

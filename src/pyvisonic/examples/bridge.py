@@ -23,7 +23,7 @@ class ProtocolBase(asyncio.Protocol):
 
     _LOGGER.debug("Initialising Protocol")
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, receiver: asyncio.Queue[bytearray], sender: asyncio.Queue[bytearray], name: str="", deb: bool = False) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop, receiver: asyncio.Queue[bytearray | None], sender: asyncio.Queue[bytearray | None], name: str="", deb: bool = False) -> None:
         """Initialize class."""
         _LOGGER.debug("Initialising Connection : %s", name)
         if loop:
@@ -74,9 +74,9 @@ class ProtocolBase(asyncio.Protocol):
         """Write to the transport."""
         while True:
             item = await self.receiver.get()
-            if item is None: # type: ignore
+            if item is None:
                 # the producer emits None to indicate that it is done
-                break   # type: ignore[unreachable]
+                break
             if self.deb:
                 _LOGGER.debug(f"[sending to {self.name} at {datetime.now(UTC).isoformat()}] : {self._to_string(item)}")
             if self.transport is not None:
@@ -179,7 +179,7 @@ class ProtocolBase(asyncio.Protocol):
 
 # Create a connection using asyncio using an ip and port
 async def create_tcp_visonic_connection(
-    address: str, port: int, loop: asyncio.AbstractEventLoop, receiver: asyncio.Queue[bytearray], sender: asyncio.Queue[bytearray], name: str="", deb: bool = False, protocol: type[ProtocolBase] = ProtocolBase
+    address: str, port: int, loop: asyncio.AbstractEventLoop, receiver: asyncio.Queue[bytearray | None], sender: asyncio.Queue[bytearray | None], name: str="", deb: bool = False, protocol: type[ProtocolBase] = ProtocolBase
 ) -> tuple[asyncio.Transport, ProtocolBase]:
     """Create Visonic manager class, returns tcp transport coroutine."""
     # use default protocol if not specified
@@ -188,7 +188,7 @@ async def create_tcp_visonic_connection(
 
 # Create a connection using asyncio through a linux port (usb or rs232)
 async def create_usb_visonic_connection(
-    loop: asyncio.AbstractEventLoop, receiver: asyncio.Queue[bytearray], sender: asyncio.Queue[bytearray], name: str="", deb: bool = False, port: str = "", baud: int = 9600, protocol: type[ProtocolBase] = ProtocolBase
+    loop: asyncio.AbstractEventLoop, receiver: asyncio.Queue[bytearray | None], sender: asyncio.Queue[bytearray | None], name: str="", deb: bool = False, port: str = "", baud: int = 9600, protocol: type[ProtocolBase] = ProtocolBase
 ) -> tuple[asyncio.Transport, ProtocolBase]:
     """Create Visonic manager class, returns rs232 transport coroutine."""
     # use default protocol if not specified
@@ -212,8 +212,8 @@ args = parser.parse_args()
 
 testloop = asyncio.get_event_loop()
 
-toalarm_queue = asyncio.Queue[bytearray]()
-fromalarm_queue = asyncio.Queue[bytearray]()
+toalarm_queue = asyncio.Queue[bytearray | None]()
+fromalarm_queue = asyncio.Queue[bytearray | None]()
 
 if len(args.comb) > 0:
     connalarm = create_usb_visonic_connection(

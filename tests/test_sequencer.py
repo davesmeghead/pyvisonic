@@ -6,7 +6,6 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from pyvisonic import VisonicProtocol
 from pyvisonic.py_const import WATCHDOG_MAXIMUM_EVENTS
 from pyvisonic.py_enum import AlPanelMode, Send
@@ -180,3 +179,32 @@ def test_contexts_have_independent_watchdog_history() -> None:
     first.watchdog_list[0] = 300
 
     assert second.watchdog_list[0] == 0
+
+
+@pytest.mark.parametrize(
+    ("sent_at", "expected_state"),
+    [
+        pytest.param(None, SequencerType.WaitingForPanelDetails, id="still-queued"),
+        pytest.param(99.0, SequencerType.WaitingForPanelDetails, id="recently-sent"),
+        pytest.param(93.0, SequencerType.InitialisePanel, id="response-timeout"),
+    ],
+)
+async def test_panel_details_timeout_starts_at_transmission(
+    panel: VisonicProtocol,
+    sent_at: float | None,
+    expected_state: SequencerType,
+) -> None:
+    context = _SequencerContext(
+        state=SequencerType.WaitingForPanelDetails,
+        previous_state=SequencerType.WaitingForPanelDetails,
+        counter=30,
+    )
+    panel._panel_details_sent_at = sent_at
+    with (
+        patch(f"{MODULE}._SequencerContext", return_value=context),
+        patch.object(panel.loop, "time", return_value=100.0),
+        patch.object(panel, "_monitor_send_queue"),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await panel._sequencer()
+    assert context.state == expected_state

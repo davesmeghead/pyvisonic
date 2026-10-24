@@ -31,12 +31,14 @@ from .py_enum import (
     AlCondition,
     AlPanelMode,
     AlTerminationType,
+    B0SubType,
     MessagePriority,
     Packet,
     Receive,
     Send,
 )
 from .py_partition_state import PartitionStateClass
+from .py_recovery import Recovery, RecoveryState
 from .py_sensor import AlSensorDevice
 from .py_switch import AlSwitchDevice
 from .py_types import AlPanelEventData
@@ -45,6 +47,10 @@ from .py_types_sending import PriorityQueueWithPeek, VisonicListEntry, pmSendMsg
 from .py_utils import get_local_time, get_utc_time, hexify, to_string
 
 log = logging.getLogger(__name__)
+
+SEND_QUEUE_WARNING_DEPTH = 100
+SEND_QUEUE_WARNING_AGE = 30.0
+SEND_QUEUE_WARNING_INTERVAL = 60.0
 
 
 class vloggerclass:
@@ -118,6 +124,10 @@ class vloggerclass:
 class ProtocolBase(AlPanelInterface, MyChecksumCalc):
     """Manage low level Visonic protocol."""
 
+    power_link_bridge_connected: bool
+    b0_wanted: set[int | B0SubType]
+    b0_waiting: set[int | B0SubType]
+
     log.debug(f"Initialising Protocol - {TEXT_PROTOCOL_VERSION} {LIBRARY_VERSION}")
 
     def __init__(self, loop: asyncio.AbstractEventLoop, force_standard_mode : bool, disable_all_commands : bool, download_code : str | None, user_code_slot: int, logger: logging.Logger | None = None) -> None:
@@ -160,6 +170,11 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
             self.force_standard_mode = True
 
         self.investigation_enable = False
+        self._recovery = Recovery()
+        self._recovery_deadline: asyncio.TimerHandle | None = None
+        self._recovery_last_progress = 0.0
+
+        self._b0_pending_requests: dict[int, float] = {}
 
         # By the time we get here there are 3 combinations of self.disable_all_commands and self.force_standard_mode
         #     Both are False --> Try to get to Powerlink
@@ -191,6 +206,8 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
         # So when get is called it looks at the highest priority queue first and if nothing then looks at the next priority queue etc
         # So urgent tagged messages get sent to the panel asap, like arm, disarm etc
         self._send_queue = PriorityQueueWithPeek()
+        self._send_queue_last_warning: float | None = None
+        self._send_queue_warning_active = False
         # Timestamp of the last received data from the panel. If this remains set to none then we have a comms problem
         #   Override to None from what _reset_connection sets it to
         self._last_recv_time_panel_data : datetime | None = None
@@ -202,6 +219,8 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
 
     def _reset_connection(self) -> None:
         """Reset the variables needed to make a new connection."""
+        self._cancel_recovery_deadline()
+        self._recovery = Recovery()
         self.panel_mode = AlPanelMode.STARTING
         # Whether its a powermax or powermaster
         self.power_master : bool | None = None                    # Set to None to represent unknown until we know True or False
@@ -224,6 +243,7 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
 
     def _shutdown(self) -> None:
         """Shutdown the connection to the panel."""
+        self._cancel_recovery_deadline()
         # Set that the transport connection to the panel is invalid.
         for p in self.partition_state:
             p.shutdown_operation()
@@ -297,6 +317,8 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
     # when the connection has problems then call the on_problem when available
     def _report_problem(self, termination : AlTerminationType) -> None:
         """Log when connection is closed, if needed call callback."""
+        if self._recovery.silent and termination not in (AlTerminationType.FLOOD_RECOVERY_COMPLETE, AlTerminationType.FLOOD_RECOVERY_FAILED):
+            return
         if self.suspend_all_operations:
             log.debug("[_report_problem] Operations Already Suspended. Please recreate connection")
             return
@@ -323,10 +345,123 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
             return False
 
     def _send_queue_put_nowait(self, item : tuple[int, VisonicListEntry]) -> None:
-        if self._on_main_loop():
-            self._send_queue.put_nowait(item)
-        else:
-            self.loop.call_soon_threadsafe(self._send_queue.put_nowait, item)
+        if not self._on_main_loop():
+            self.loop.call_soon_threadsafe(self._send_queue_put_nowait, item)
+            return
+        if self.suspend_all_operations or self._recovery.silent:
+            return
+        if (
+            self.panel_mode == AlPanelMode.STARTING
+            and item[0] > MessagePriority.ACK
+            and item[1].command in (
+                pmSendMsg[Send.EXIT], pmSendMsg[Send.STOP], pmSendMsg[Send.INIT],
+                pmSendMsg[Send.PANEL_DETAILS],
+            )
+        ):
+            # Share ACK ordering so incoming traffic cannot starve the handshake.
+            item = (int(MessagePriority.ACK), item[1])
+        if item[1].queued_at is None:
+            item[1].queued_at = self.loop.time()
+        self._send_queue.put_nowait(item)
+
+    @property
+    def recovery_in_progress(self) -> bool:
+        """Whether commands are blocked by bounded flood recovery."""
+        return self._recovery.silent
+
+    @property
+    def recovery_listening(self) -> bool:
+        """Whether an unexpected transport loss must terminate the quiet attempt."""
+        return self._recovery.state == RecoveryState.SILENT
+
+    def _cancel_recovery_deadline(self) -> None:
+        if self._recovery_deadline is not None:
+            self._recovery_deadline.cancel()
+            self._recovery_deadline = None
+
+    def _recovery_deadline_reached(self) -> None:
+        if self._recovery.state == RecoveryState.SILENT:
+            self._recovery.state = RecoveryState.FAILED
+            self._advance_recovery()
+
+    def _recovery_eligible(self) -> bool:
+        return not (
+            self.suspend_all_operations or self.disable_all_commands
+            or not self.is_power_master() or self.panel_mode != AlPanelMode.POWERLINK
+            or self.power_link_bridge_connected or self.pm_download_mode
+        )
+
+    def _check_automatic_recovery(self) -> None:
+        if (
+            not self._recovery.silent and self._recovery_eligible()
+            and self._recovery.flooding(self.loop.time())
+        ):
+            self._start_recovery()
+
+    def _start_recovery(self) -> None:
+        if not self._recovery_eligible():
+            return
+        user_reply_pending = (
+            self.pm_expected_response and self.pm_last_sent_message is not None
+            and self.pm_last_sent_message.command in (pmSendMsg[Send.ARM], pmSendMsg[Send.BYPASSEN], pmSendMsg[Send.BYPASSDI])
+        )
+        if user_reply_pending or not self._is_send_queue_empty(MessagePriority.IMMEDIATE):
+            return
+        if not self._recovery.start(self.loop.time()):
+            return
+        assert self._recovery.started_at is not None
+        self._recovery_deadline = self.loop.call_at(
+            self._recovery.started_at + Recovery.MAX_SILENCE,
+            self._recovery_deadline_reached,
+        )
+        self._clear_receive_response_list()
+        self._empty_send_queue(MessagePriority.DELETE_ALL)
+        self.b0_wanted.clear()
+        self.b0_waiting.clear()
+        self._b0_pending_requests.clear()
+        log.warning("Automatic RECOVERY triggered: sustained status flood across three 10-second windows")
+        log.warning("RECOVERY silence started: all writes blocked, receiving continues; minimum 120s, deadline 180s")
+
+    def _advance_recovery(self) -> None:
+        state = self._recovery.tick(self.loop.time())
+        if state in (RecoveryState.RESUMING, RecoveryState.FAILED):
+            termination = (
+                AlTerminationType.FLOOD_RECOVERY_COMPLETE if state == RecoveryState.RESUMING
+                else AlTerminationType.FLOOD_RECOVERY_FAILED
+            )
+            if state == RecoveryState.FAILED:
+                log.error("RECOVERY failed: traffic did not settle within 180 seconds; integration connection stopped, automatic reconnection disabled")
+            else:
+                log.warning("RECOVERY traffic settled after silence; requesting fresh connection state")
+            self._shutdown()
+            try:
+                self._report_problem(termination)
+            finally:
+                self.suspend_all_operations = True
+            return
+        now = self.loop.time()
+        if now - self._recovery_last_progress >= 30:
+            assert self._recovery.started_at is not None
+            self._recovery_last_progress = now
+            log.info("RECOVERY receiving only: %.1fs of 180s", now - self._recovery.started_at)
+
+    def _monitor_send_queue(self) -> None:
+        """Report sustained queue pressure without changing connection state."""
+        if self.suspend_all_operations or self._recovery.silent:
+            return
+        now = self.loop.time()
+        depth = self._send_queue.qsize()
+        age = self._send_queue.oldest_age(now)
+        if depth < SEND_QUEUE_WARNING_DEPTH and age < SEND_QUEUE_WARNING_AGE:
+            if self._send_queue_warning_active:
+                log.info("Send queue recovered: depth=%d, oldest queued message=%.1fs", depth, age)
+                self._send_queue_warning_active = False
+            return
+        if self._send_queue_last_warning is None or now - self._send_queue_last_warning >= SEND_QUEUE_WARNING_INTERVAL:
+            log.warning("Send queue backlog: depth=%d, oldest queued message=%.1fs", depth, age)
+            self._send_queue_last_warning = now
+            self._send_queue_warning_active = True
+
 
     # Clear the send queue and reset the associated parameters
     def _empty_send_queue(self, priority : MessagePriority) -> None:
@@ -443,6 +578,7 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
 
             # A validated packet has been received
             msg_type = packet[1]
+            self._recovery.observe(packet, self.loop.time(), self._recovery_eligible())
             # log.debug(f"[data receiver] *** Received validated message {hexify(msg_type)}   packet {to_string(packet)}")
             # Send an ACK if needed
             if ackneeded:

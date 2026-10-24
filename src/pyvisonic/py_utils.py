@@ -51,7 +51,7 @@ def get_utc_time() -> datetime:
 def b2i(data: bytearray | bytes, big_endian: bool = False) -> int:
     """Convert bytes to int."""
     return int.from_bytes(
-        data if isinstance(data, (bytearray, bytes)) else bytes(data), # type: ignore
+        data,
         "big" if big_endian else "little"
     )
 

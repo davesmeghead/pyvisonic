@@ -69,10 +69,6 @@ class ImageRecord:
         """Return the last image bool for this image."""
         return self._lastimage
 
-    def has_parent(self) -> bool:
-        """There should always be a parent but just check."""
-        return self.parent is not None
-
     @property
     def crc(self) -> tuple[int, int] | None:
         """Return the CRC the panel declared for this image, or None if it did not."""
@@ -299,13 +295,13 @@ class AlImageManager:
 
     def get_last_image_record(self) -> tuple[ImageZoneClass, ImageRecord] | None:
         """Get the last image record."""
-        if self.last_image is not None and self.last_image.has_parent():
+        if self.last_image is not None:
             return (self.last_image.parent, self.last_image)
         return None
 
     def get_current_image_record(self) -> tuple[ImageZoneClass, ImageRecord] | None:
         """Get the last image record."""
-        if self._current_image is not None and self._current_image.has_parent():
+        if self._current_image is not None:
             return (self._current_image.parent, self._current_image)
         return None
 

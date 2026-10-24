@@ -871,8 +871,9 @@ class MessageHandling(MessageHandlingB0Data):
             # Do not process this B0 message as it seems to be incorrect
             return
 
-        if sub_type in self.b0_waiting:
-            self.b0_waiting.remove(sub_type)
+        if msg_type == 3:
+            self._b0_pending_requests.pop(sub_type, None)
+            self.b0_waiting.discard(sub_type)
 
         pm = "" if self.panel_model == "Unknown" else self.panel_model + " "
         if OBFUS:

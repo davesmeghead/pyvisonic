@@ -185,8 +185,12 @@ class VisonicProtocol(MessageHandling):
             a |= panel_status_to_dict(self.panel_status)
         return a
 
-    def get_sensor_bypass_state(self) -> None:
+    def get_sensor_bypass_state(self) -> AlCommandStatus:
         """Request sensor bypass update."""
+        if not self._on_main_loop():
+            return self._run_command_on_loop(self.get_sensor_bypass_state)
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
         if self.is_power_master():
             # Request the bypass status from the panel to update the sensors
             #     Instead of delaying the request, do it immediate
@@ -197,6 +201,7 @@ class VisonicProtocol(MessageHandling):
             # PowerMax
             # Request the bypass status from the panel to update the sensors
             self.add_message_to_send_queue(Send.BYPASSTAT, priority = MessagePriority.IMMEDIATE)
+        return AlCommandStatus.SUCCESS
 
     def _create_pin(self, pin : str | None) -> bytearray:
         # Pin is None when either we can perform the action without a code OR we're in Powerlink/StandardPlus and have the pin code to use
@@ -210,11 +215,25 @@ class VisonicProtocol(MessageHandling):
             bpin = bytearray([0,0])
         return bpin
 
+    def _run_command_on_loop(self, command: Callable[[], AlCommandStatus]) -> AlCommandStatus:
+        """Wait for command validation and queue admission on the protocol loop."""
+        if not self.loop.is_running():
+            return AlCommandStatus.FAIL_PANEL_NO_CONNECTION
+
+        async def execute() -> AlCommandStatus:
+            return command()
+
+        return asyncio.run_coroutine_threadsafe(execute(), self.loop).result()
+
     # panel_command
     #       state is PanelCommand
     #       optional code, if not provided then try to use the EPROM downloaded pin if in powerlink
     def panel_command(self, state : AlPanelCommand, code : str | None = "", partitions : set[int] | None = None) -> AlCommandStatus:
         """Send a request to the panel to Arm/Disarm."""
+        if not self._on_main_loop():
+            return self._run_command_on_loop(lambda: self.panel_command(state, code, partitions))
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
 
         if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
@@ -262,6 +281,10 @@ class VisonicProtocol(MessageHandling):
 
     def send_switch(self, device : int, state : AlSwitchCommand) -> AlCommandStatus:
         """Send an Switch command to the panel."""
+        if not self._on_main_loop():
+            return self._run_command_on_loop(lambda: self.send_switch(device, state))
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
         # Send.SWITCH      : VisonicCommand(convert_bytearray('A4 00 00 00 00 00 99 99 99 00 00 43'), None  , False, "Switch Data" ),
         #log.debug(f"[SendSwitchCommand] Processing {device} {type(device)}")
         if self.pm_download_mode:
@@ -285,6 +308,10 @@ class VisonicProtocol(MessageHandling):
 
     def get_sensor_image(self, device : int, count : int) -> AlCommandStatus:
         """Get the jpg camera image."""
+        if not self._on_main_loop():
+            return self._run_command_on_loop(lambda: self.get_sensor_image(device, count))
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
         if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
         if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:
@@ -304,6 +331,13 @@ class VisonicProtocol(MessageHandling):
 
     async def set_panel_baud(self, baudrate : int) -> AlCommandStatus:
         """Set the panel baudrate."""
+        if not self._on_main_loop():
+            if not self.loop.is_running():
+                return AlCommandStatus.FAIL_PANEL_NO_CONNECTION
+            result = asyncio.run_coroutine_threadsafe(self.set_panel_baud(baudrate), self.loop)
+            return await asyncio.wrap_future(result)
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
         if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
         if self.is_power_master() and self.panel_mode in [AlPanelMode.POWERLINK]:                  # Only do this for powermaster panels and in powerlink mode
@@ -343,6 +377,11 @@ class VisonicProtocol(MessageHandling):
     #
     def bypass_command(self, sensor : int | set[int], bypass_value : bool, code : str | None = "") -> AlCommandStatus:
         """Set or Clear Sensor Bypass."""
+        if not self._on_main_loop():
+            return self._run_command_on_loop(lambda: self.bypass_command(sensor, bypass_value, code))
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
+
 
         def create_bypass_b0_message(bypass : bool, zone_data : bytearray, pin : bytearray) -> bytearray:
 
@@ -459,6 +498,10 @@ class VisonicProtocol(MessageHandling):
     #       optional pin, if not provided then try to use the EPROM downloaded pin if in powerlink
     def get_event_log(self, code : str | None = "") -> AlCommandStatus:
         """Get Panel Event Log."""
+        if not self._on_main_loop():
+            return self._run_command_on_loop(lambda: self.get_event_log(code))
+        if self.recovery_in_progress:
+            return AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS
         if self.pm_download_mode:
             return AlCommandStatus.FAIL_DOWNLOAD_IN_PROGRESS
         if self.panel_mode not in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]:

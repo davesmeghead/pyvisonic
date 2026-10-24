@@ -69,8 +69,7 @@ class VisonicClient(ManageConnection):
         """Request an updated sensor bypass state."""
         if (status := self._command_status()) != AlCommandStatus.SUCCESS:
             return status
-        self._protocol.get_sensor_bypass_state()
-        return AlCommandStatus.SUCCESS
+        return self._protocol.get_sensor_bypass_state()
 
     async def send_bypass(
         self,

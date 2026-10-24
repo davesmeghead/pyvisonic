@@ -150,10 +150,8 @@ async def test_switch_and_event_log_commands(client: VisonicClient) -> None:
         is AlCommandStatus.FAIL_INVALID_STATE
     )
     assert await client.send_get_event_log("1234") is AlCommandStatus.SUCCESS
-    assert client.get_sensor_bypass_state() is AlCommandStatus.SUCCESS
     client._protocol.send_switch.assert_called_once_with(3, AlSwitchCommand.ON)
     client._protocol.get_event_log.assert_called_once_with("1234")
-    client._protocol.get_sensor_bypass_state.assert_called_once_with()
 
 
 @pytest.mark.parametrize("extended", [False, True])
@@ -178,3 +176,19 @@ def test_disconnection_count_property(client: VisonicClient) -> None:
     assert client.disconnection_count == 1
     with pytest.raises(AttributeError):
         setattr(client, "disconnection_count", 5)
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        AlCommandStatus.SUCCESS,
+        AlCommandStatus.FAIL_RECOVERY_IN_PROGRESS,
+        AlCommandStatus.FAIL_PANEL_NO_CONNECTION,
+    ],
+)
+def test_bypass_refresh_propagates_protocol_result(
+    client: VisonicClient, expected: AlCommandStatus
+) -> None:
+    client._protocol.get_sensor_bypass_state.return_value = expected
+    assert client.get_sensor_bypass_state() is expected
+    client._protocol.get_sensor_bypass_state.assert_called_once_with()

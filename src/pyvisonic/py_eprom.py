@@ -217,6 +217,7 @@ pmDecodePanelSettings: dict[str | EPROM, SettingsCommand] = \
     EPROM.SIRENS_MAS       : SettingsCommand( PSC.MAS , Dumpy,  8, PDT.BYTE   , 46818,  80,  10,    -1,  "Siren Data, PowerMaster",            {} ),   # 10 bytes each, 8 sirens
     EPROM.KEYPAD_MAS       : SettingsCommand( PSC.MAS , Dumpy, 32, PDT.BYTE   , 46898,  80,  10,    -1,  "Keypad Data, PowerMaster",           {} ),   # 10 bytes each, 32 keypads
     EPROM.ZONEEXT_MAS      : SettingsCommand( PSC.MAS , Dumpy, 64, PDT.BYTE   , 47218,  80,  10,    -1,  "Zone Extended Data, PowerMaster",    {} ),   # 10 bytes each, 64 zones
+    EPROM.KEYFOB_MAS       : SettingsCommand( PSC.MAS , Dumpy, 32, PDT.BYTE   , 46338,  80,  10,    -1,  "Keyfob Data, PowerMaster",           {} ),   # 10 bytes each, 32 keyfobs
     "AlarmLED10"           : SettingsCommand( PSC.MAS , Dumpy, 64, PDT.BYTE   , 49250,   8,   1,    -1,  "Alarm LED, PowerMaster 10",          {} ),   # This is the Alarm LED On/OFF settings for Motion Sensors -> Dev Settings --> Alarm LED
     "AlarmLED30"           : SettingsCommand( PSC.MAS , Dumpy, 64, PDT.BYTE   , 49735,   8,   1,    -1,  "Alarm LED, PowerMaster 30",          {} ),   # This is the Alarm LED On/OFF settings for Motion Sensors -> Dev Settings --> Alarm LED
     EPROM.ZONE_DEL_MAS     : SettingsCommand( PSC.MAS , Dumpy, 64, PDT.BYTE   , 49542,  16,   2,    -1,  "Zone Delay, PowerMaster",            {} )    # This is the Zone Delay settings for Motion Sensors -> Dev Settings --> Disarm Activity
@@ -325,6 +326,8 @@ class EPROMManager:
 
     def find_length(self, is_power_master : bool, page : int, index : int) -> int | None:
         """Find the length of a block to download based on page and index."""
+        if EPROM_DOWNLOAD_ALL:
+            return MAX_DOWNLOAD_BLOCK_SIZE if 0 <= page < PAGE_SIZE and index in (0, MAX_DOWNLOAD_BLOCK_SIZE) else None
         p = PanelTypeEnum.POWER_MASTER if is_power_master else PanelTypeEnum.POWER_MAX
         for b in self.pm_block_download[p]:
             if b[0] == index and b[1] == page:

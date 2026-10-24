@@ -378,7 +378,7 @@ class MaintainInterface:
                         ),
                         sock=sock,
                     )
-                    if connection_status_callback is not None and cvp is not None:
+                    if connection_status_callback is not None:
                         connection_status_callback(ConnectionStatus.CONNECTED, cvp)
                     return cvp
             except (TimeoutError, OSError) as ex:

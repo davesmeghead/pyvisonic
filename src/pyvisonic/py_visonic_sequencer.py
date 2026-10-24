@@ -57,6 +57,9 @@ from .py_visonic_despatcher import Despatcher
 
 log = logging.getLogger(__name__)
 
+B0_REQUEST_RETRY_INTERVAL = 10.0
+B0_PANEL_STATE_FRESHNESS_INTERVAL = 1.0
+
 
 INVESTIGATION_MATCH = {
     B0SubType.INVESTIGATION_00,
@@ -326,10 +329,10 @@ class Sequencer(Despatcher):
 
         def _request_missing_panel_config(missing : set[PanelSetting]) -> None:
             m: list[int] = []
-            for miss in pmPanelSettingCodes:
+            for miss in missing:
                 #setting: PanelSettingCodesType = self.panel_settings[miss]
                 val35 = pmPanelSettingCodes[miss].p_master_b035_panel
-                if miss in self.panel_settings and not self.panel_settings[miss].is_set() and val35 is not None:
+                if miss in self.panel_settings and val35 is not None:
                     m.append(val35)
             if len(m) > 0:
                 log.debug(f"[_requestMissingPanelConfig]      Type 35 Wanting {m}")
@@ -343,7 +346,7 @@ class Sequencer(Despatcher):
                 m = []
                 for miss in missing:
                     val42 = pmPanelSettingCodes[miss].p_master_b042_panel
-                    if miss in self.panel_settings and not self.panel_settings[miss].is_set() and val42 is not None:
+                    if miss in self.panel_settings and val42 is not None:
                         m.append(val42)
                 if len(m) > 0:
                     log.debug(f"[_requestMissingPanelConfig]      Type 42 Wanting {m}")
@@ -358,7 +361,7 @@ class Sequencer(Despatcher):
                     mas: set[B0SubType] = set()
                     for a in missing:
                         val = pmPanelSettingCodes[a].p_master_b0_mess
-                        if a in pmPanelSettingCodes and a in self.panel_settings and val is not None and not self.panel_settings[a].is_set():
+                        if a in pmPanelSettingCodes and a in self.panel_settings and val is not None:
                             mas.add(val)
                     if len(mas) > 0:
                         log.debug(f"[_requestMissingPanelConfig]      Wanting {mas}")
@@ -660,13 +663,16 @@ class Sequencer(Despatcher):
         def do_eeprom_started_download(lastrecv: datetime | None) -> SequencerType | None:
             # We got a first response, now we can Download the panel EPROM settings
             if (s := process_panel_error_messages()) != PanelErrorStates.AllGood:
-                if s in [PanelErrorStates.AccessDeniedDownload, PanelErrorStates.DownloadRetryReceived, PanelErrorStates.TimeoutReceived]:
+                if s == PanelErrorStates.AccessDeniedStop and self.power_master is False:
+                    log.debug("[_sequencer] Ignoring STOP denial during PowerMax EPROM download")
+                elif s in [PanelErrorStates.AccessDeniedDownload, PanelErrorStates.DownloadRetryReceived, PanelErrorStates.TimeoutReceived]:
                     self.pm_expected_response = set()
                     return SequencerType.EPROMInitialiseDownload
-                if s == PanelErrorStates.DespatcherException:
+                elif s == PanelErrorStates.DespatcherException:
                     # start again, restart the despatcher task
                     return SequencerType.Reset
-                return SequencerType.InitialisePanel
+                else:
+                    return SequencerType.InitialisePanel
             interval = get_utc_time() - self._last_send_download_eprom
             log.debug(f"[_sequencer] interval={interval}  td={DOWNLOAD_RETRY_DELAY}   self._last_send_download_eprom(UTC)={self._last_send_download_eprom}    timenow(UTC)={get_utc_time()}")
 
@@ -679,13 +685,16 @@ class Sequencer(Despatcher):
         def do_eeprom_doing_download() -> SequencerType | None:
             if (s := process_panel_error_messages()) != PanelErrorStates.AllGood:
                 # Handle error messages from the panel
-                if s in [PanelErrorStates.AccessDeniedDownload, PanelErrorStates.DownloadRetryReceived, PanelErrorStates.TimeoutReceived]:
+                if s == PanelErrorStates.AccessDeniedStop and self.power_master is False:
+                    log.debug("[_sequencer] Ignoring STOP denial during PowerMax EPROM download")
+                elif s in [PanelErrorStates.AccessDeniedDownload, PanelErrorStates.DownloadRetryReceived, PanelErrorStates.TimeoutReceived]:
                     self.pm_expected_response = set()
                     return SequencerType.EPROMInitialiseDownload
-                if s == PanelErrorStates.DespatcherException:
+                elif s == PanelErrorStates.DespatcherException:
                     # start again, restart the despatcher task
                     return SequencerType.Reset
-                return SequencerType.InitialisePanel
+                else:
+                    return SequencerType.InitialisePanel
             if self.pm_download_complete:
                 # Download Complete
                 return SequencerType.EPROMDownloadComplete
@@ -694,7 +703,7 @@ class Sequencer(Despatcher):
             interval_start = timenow - self._last_send_download_eprom
             #log.debug(f"[_sequencer] timenow={get_utc_time()}   interval_start={interval_start}  self._last_send_download_eprom={self._last_send_download_eprom}")
             #log.debug(f"[_sequencer]                                        interval_last_receive={interval_last_receive}  self._last_recv_time_panel_data={self._last_recv_time_panel_data}")
-            if interval_start > timedelta(seconds=DOWNLOAD_TIMEOUT):
+            if not EPROM_DOWNLOAD_ALL and interval_start > timedelta(seconds=DOWNLOAD_TIMEOUT):
                 # The whole Download sequence hasn't finished in this timeout
                 return SequencerType.InitialisePanel
             if self._last_recv_time_panel_data is not None:
@@ -810,6 +819,14 @@ class Sequencer(Despatcher):
         while not self.suspend_all_operations:
             try:
                 await self._pause_event.wait()  # pauses here if cleared
+                self._check_automatic_recovery()
+                if self._recovery.silent:
+                    self._advance_recovery()
+                    await asyncio.sleep(0.1)
+                    continue
+                self._monitor_send_queue()
+                if self.suspend_all_operations:
+                    break
                 changed_state = context.state != context.previous_state
                 if changed_state:
                     # create a generic counter that gets reset every state change, so it can be used in a single state
@@ -958,6 +975,7 @@ class Sequencer(Despatcher):
                     if context.state == SequencerType.InitialisePanel:          ################################################################ Initialising            ###################################################
                         self.panel_mode = AlPanelMode.STARTING
                         await asyncio.sleep(1.0)
+                        self._panel_details_sent_at = None
                         _reset_panel_interface()
                         self._clear_panel_error_messages()
                         if not self.pm_got_panel_details:
@@ -991,7 +1009,7 @@ class Sequencer(Despatcher):
                                 context.state = SequencerType.InitialisePanel
                                 log.debug(f"[_sequencer]    Abnormal: DownloadRetryReceived loop = {context.delay_loops}")
                             # Ignore other errors
-                        elif context.counter >= 7:     # up to 7 seconds to get panel data message (worst case to also allow for Bridge traffic)
+                        elif self._panel_details_sent_at is not None and self.loop.time() - self._panel_details_sent_at >= 7:
                             log.debug("[_sequencer]    Abnormal: Taken too long, going to init")
                             context.state = SequencerType.InitialisePanel
 
@@ -1331,8 +1349,7 @@ class Sequencer(Despatcher):
 
                         int_diff_interval = (context.counter % 10 == 0
                                                 and (self.panel_integration_time_difference is None
-                                                    or (self.panel_integration_time_difference is not None # type: ignore
-                                                        and abs(self.panel_integration_time_difference.total_seconds()) > 5)
+                                                    or abs(self.panel_integration_time_difference.total_seconds()) > 5
                                                     )
                                                 )
 
@@ -1490,12 +1507,14 @@ class Sequencer(Despatcher):
                     if self.is_power_master() and self.panel_mode in [AlPanelMode.STANDARD, AlPanelMode.STANDARD_PLUS, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.POWERLINK]: # not AlPanelMode.MINIMAL_ONLY
                         tnow = get_local_time()
                         diff = (tnow - context.last_b0_wanted_request_time).total_seconds()
+                        if not self.image_manager.is_sequence_active():
+                            self._flush_deferred_panel_state_request()
                         if self.image_manager.is_sequence_active():
                             # A Camera PIR download is underway. Sending B0 requests part way through makes the
                             # panel break off the F4 stream and answer the B0 instead, so hold off. b0_wanted
                             # accumulates and goes out once the images have finished.
                             log.debug("[_sequencer] Deferring B0 requests, camera image download in progress")
-                        elif self._is_send_queue_empty() and diff >= 10: # There must be at least 10 seconds between subsequent requests
+                        elif self._is_send_queue_empty() and diff >= B0_REQUEST_RETRY_INTERVAL: # There must be at least 10 seconds between subsequent requests
                             if len(self.b0_waiting) > 0:  # have we received the data that we last asked for last time
                                 log.debug(f"[_sequencer] ****************************** Waiting For B0_Waiting **************************** {to_string_list(self.b0_waiting)}")
                                 self.b0_wanted.update(self.b0_waiting) # ask again for them
@@ -1503,9 +1522,7 @@ class Sequencer(Despatcher):
                                 log.debug(f"[_sequencer] ****************************** Asking For B0_Wanted **************************** {to_string_list(self.b0_wanted)}     timediff={diff}")
                                 tmp = [pmSendMsgB0[i].data if i in pmSendMsgB0 else i for i in self.b0_wanted]  # self.b0_wanted can contain State enumerations or the integer of the message subtype
                                 self.b0_wanted = set()
-                                s = self._create_b0_data_request(taglist = set(tmp))
-                                self.add_message_to_send_queue(s)
-                                self.b0_waiting.update(set(tmp))
+                                self._queue_b0_data_request(set(tmp))
                                 context.last_b0_wanted_request_time = tnow
 
                     # Dump all sensors to the file every 60 seconds (1 minute)
@@ -1573,6 +1590,40 @@ class Sequencer(Despatcher):
 
         checksum = self._calculate_crc(pmaster_data)   # returns a bytearray with a single byte
         return bytearray([Packet.HEADER]) + pmaster_data + checksum + bytearray([Packet.FOOTER])
+
+    def _queue_b0_data_request(self, taglist: B0SubType | set[int | B0SubType] | set[B0SubType] | set[int], priority: MessagePriority = MessagePriority.NORMAL) -> None:
+        """Coalesce background reads while preserving explicit user requests."""
+        if not self._on_main_loop():
+            tags = taglist.copy() if isinstance(taglist, set) else taglist
+            self.loop.call_soon_threadsafe(self._queue_b0_data_request, tags, priority)
+            return
+        request = self._create_b0_data_request(taglist)
+        if priority <= MessagePriority.ACK:
+            self.add_message_to_send_queue(request, priority=priority)
+            return
+        tags = set(request[10:-3])
+        now = self.loop.time()
+        if self.is_power_master() and priority == MessagePriority.NORMAL and 0x24 in tags and self._b0_panel_state_is_fresh(now):
+            tags.discard(0x24)
+            self._b0_panel_state_deferred = True
+        elif 0x24 in tags:
+            self._b0_panel_state_deferred = False
+        self._b0_pending_requests = {tag: sent for tag, sent in self._b0_pending_requests.items() if now - sent < B0_REQUEST_RETRY_INTERVAL}
+        queued = self._send_queue.pending_b0_tags(tags, int(priority))
+        remaining = tags - queued - self._b0_pending_requests.keys()
+        if not remaining:
+            return
+        request = self._create_b0_data_request(remaining)
+        entry = VisonicListEntry(raw=request, b0_request_tags=frozenset(remaining))
+        self.add_message_to_send_queue(entry, priority=priority)
+
+    def _b0_panel_state_is_fresh(self, now: float) -> bool:
+        return self._b0_last_decoded_panel_state is not None and now - self._b0_last_decoded_panel_state < B0_PANEL_STATE_FRESHNESS_INTERVAL
+
+    def _flush_deferred_panel_state_request(self) -> None:
+        if self._b0_panel_state_deferred and not self._b0_panel_state_is_fresh(self.loop.time()):
+            self._b0_panel_state_deferred = False
+            self._queue_b0_data_request(B0SubType.PANEL_STATE_1, MessagePriority.URGENT)
 
     def _create_b0_data_request(self, taglist : B0SubType | bytearray | set[int | B0SubType] | set[B0SubType] | set[int] | None = None) -> bytearray:
 
@@ -1690,8 +1741,7 @@ class Sequencer(Despatcher):
 
     def _fetch_panel_status(self, priority : MessagePriority) -> None:
         if self.is_power_master():
-            s = self._create_b0_data_request(taglist = {pmSendMsgB0[B0SubType.PANEL_STATE_1].data} )
-            self.add_message_to_send_queue(s, priority = priority)
+            self._queue_b0_data_request(B0SubType.PANEL_STATE_1, priority)
         else:
             self.add_message_to_send_queue(Send.STATUS_SEN, priority = priority)
 

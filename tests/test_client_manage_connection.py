@@ -41,6 +41,7 @@ async def client() -> AsyncGenerator[ManageConnection]:
     )
     manager.logger = MagicMock(spec=logging.Logger)
     manager._visonic_protocol = MagicMock()
+    manager._visonic_protocol.recovery_in_progress = False
     yield manager
     await manager.async_panel_stop()
 

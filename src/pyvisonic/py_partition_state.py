@@ -187,6 +187,7 @@ class PartitionStateClass:
         self.panel_trouble_status: AlTroubleType = AlTroubleType.NONE
         self.partition_general_trouble: bool = False
         self.panel_battery_trouble: bool = False
+        self.panel_communication_trouble: bool = False
         self.was_entry_delay: bool = False           # real entry-delay countdown seen this arm cycle
         self.panel_intruder_confirmed: bool = False  # panel_intruder_status set by a real zone breach, not just ALARM_DELAY
 
@@ -271,7 +272,8 @@ class PartitionStateClass:
         # These are the values that are used to determine if the panel state has been changed
         return [self.siren_active, self.panel_state_data, self.panel_ready,
                 self.panel_trouble_status, self.panel_alarm_status,
-                self.panel_intruder_status, self.panel_bypass, self.partition_general_trouble]
+                self.panel_intruder_status, self.panel_bypass, self.partition_general_trouble,
+                self.panel_battery_trouble, self.panel_tamper, self.panel_communication_trouble]
 
     def set_bell_time(self, bt: int) -> None:
         """Set the bell time."""
@@ -292,6 +294,10 @@ class PartitionStateClass:
         """Determine the trouble status."""
         if self.panel_trouble_status != AlTroubleType.NONE:
             return self.panel_trouble_status.name.lower()
+        if self.panel_communication_trouble:
+            return AlTroubleType.COMMUNICATION.name.lower()
+        if self.panel_battery_trouble:
+            return AlTroubleType.BATTERY.name.lower()
         if self.partition_general_trouble:
             return AlTroubleType.GENERAL.name.lower()
         return AlTroubleType.NONE.name.lower()

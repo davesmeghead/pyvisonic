@@ -368,10 +368,9 @@ class ManageDevices(ProtocolBase):
         # Process Devices (Sirens and Keypads)
         # ------------------------------------------------------------------------------------------------------------------------------------------------
         if self.is_power_master(): # PowerMaster models
-            # Process keyfob settings
-            # I do not trust the keyfob settings for powermaster panels so commenting out, should get B0 data instead
-            setting = self.eprom_manager.lookup_eprom(EPROM.KEYFOB_MAX)
-            log_setting("Keyfob, but not used for powermaster panels, logged here for investigation", setting)
+            # Candidate PowerMaster keyfob records are logged until the layout is verified.
+            setting = self.eprom_manager.lookup_eprom(EPROM.KEYFOB_MAS)
+            log_setting("Candidate PowerMaster keyfob data, investigation only", setting)
             #for i in range(min(len(setting), keyfob_count)):
             #    device_id = AlGenericDevice.make_key(IndexName.KEYFOB, i)
             #    if device_id not in self.device_list and any(v not in INVALID_VALUES for v in setting[i][:3]):
@@ -403,6 +402,8 @@ class ManageDevices(ProtocolBase):
                 if isinstance(val1, bytearray):
                     device_id = AlGenericDevice.make_key(IndexName.SIREN, i)
                     if any(v not in INVALID_VALUES for v in val1[:5]):
+                        # Low 13 bits match the printed ID suffix on tested wireless devices.
+                        _enrollment_id_suffix = int.from_bytes(val1[:2], "little") & 0x1FFF
                         device_str = f"{device_str},S{i+1:0>2}"
                         add_device(IndexName.SIREN, i, device_name="Siren")
         else:
@@ -650,6 +651,8 @@ class ManageDevices(ProtocolBase):
 
             for i in range(zone_count):
                 if self.is_power_master():  # PowerMaster models    adding and then deleting leaves this: 00 00 00 00 00 1e 00 00 00 00
+                    # Low 13 bits match the printed ID suffix on tested wireless devices.
+                    _enrollment_id_suffix = None if pmaster_zone_ext_data[i][5] == 0xFE else int.from_bytes(pmaster_zone_ext_data[i][:2], "little") & 0x1FFF
                     self.panel_settings[PanelSetting.ZoneEnrolled].set_bool(i, pmaster_zone_ext_data[i][2:6] != bytearray.fromhex("FF FF FF FF") and pmaster_zone_ext_data[i][6:10] != bytearray.fromhex("00 00 00 00"))
                     self.panel_settings[PanelSetting.ZoneTypes].set_int(i, int(zone_data[i]))
                     self.panel_settings[PanelSetting.ZoneChime].set_int(i, int(zone_data[i]))

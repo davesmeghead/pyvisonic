@@ -3,7 +3,8 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, NamedTuple, cast
+from heapq import heapify
+from typing import Any, NamedTuple
 
 from .py_const import OBFUS, DebugLevel
 from .py_enum import B0SubType, Receive, Send
@@ -80,9 +81,9 @@ pmSendMsg: dict[Any, VisonicCommand] = {
     Send.GET_IMAGE    : VisonicCommand(convert_bytearray('AD 0B 99 99 FF FF 00 00 00 00 00 43')         , [Receive.IMAGE_MGMT]        ,  True, False,      SendDebugI, 0.0, "Requesting JPG Image" ),           # Request a jpg image, first 99 is the zone, the second 99 is the number of images.
     # DISCONNECT_MESSAGE = "0d ad 0a 00 00 00 00 00 00 00 00 00 43 05 0a"
 
-    # Acknowledges
-    Send.ACK          : VisonicCommand(convert_bytearray('02')                                          , None                        , False, False, DebugLevel.NONE, 0.0, "Ack" ),
-    Send.ACK_PLINK    : VisonicCommand(convert_bytearray('02 43')                                       , None                        , False, False, DebugLevel.NONE, 0.0, "Ack Powerlink" ),
+    # ACK waittime spaces PowerMaster ACKs without delaying user commands.
+    Send.ACK          : VisonicCommand(convert_bytearray('02')                                          , None                        , False, False, DebugLevel.NONE, 0.15, "Ack" ),
+    Send.ACK_PLINK    : VisonicCommand(convert_bytearray('02 43')                                       , None                        , False, False, DebugLevel.NONE, 0.15, "Ack Powerlink" ),
 
     # PowerMaster specific
     #Send.PM_REQUEST   : VisonicCommand(convert_bytearray('B0 01 99 01 05 43')                           , [Receive.POWERMASTER]       ,  True, False,      SendDebugM, 0.0, "Powermaster Request Type 1" ),       # Request a message type from the panel, change 99 with the message type
@@ -113,24 +114,26 @@ class B0_SendMessageTuple:
 
     def __str__(self) -> str:
         """Convert to string."""
-        if isinstance(self.data, int):
-            return f"Chunky={self.chunky} Paged={self.paged} Subtype={self.data}"
-        if isinstance(self.data, B0SubType): # type: ignore
-            return f"Chunky={self.chunky} Paged={self.paged} Subtype={self.data.name}"
-        raise PyVisonicException(
-            "B0_SendMessageTuple exception, invalid value",
-            code=300,
-        )
+        match self.data:
+            case int():
+                return f"Chunky={self.chunky} Paged={self.paged} Subtype={self.data}"
+            case B0SubType():
+                return f"Chunky={self.chunky} Paged={self.paged} Subtype={self.data.name}"
+            case _:
+                raise PyVisonicException(
+                    "B0_SendMessageTuple exception, invalid value",
+                    code=300,
+                )
 
-pmSendMsgB0 = {   #                                      data  chunky paged
+pmSendMsgB0: dict[B0SubType, B0_SendMessageTuple] = {   # data  chunky paged
     B0SubType.WIRELESS_DEV_UPDATING : B0_SendMessageTuple(0x02,  True, False),
     B0SubType.WIRELESS_DEV_CHANNEL  : B0_SendMessageTuple(0x04,  True, False),
     B0SubType.INVALID_COMMAND       : B0_SendMessageTuple(0x06, False, False),      # This isn't chunked  INVALID_COMMAND
     B0SubType.WIRELESS_DEV_INACTIVE : B0_SendMessageTuple(0x08,  True, False),
-    B0SubType.WIRELESS_DEV_MISSING  : B0_SendMessageTuple(0x09,  True, False),
+    B0SubType.WIRELESS_DEV_ONEWAY   : B0_SendMessageTuple(0x09,  True, False),
     B0SubType.TAMPER_ACTIVITY       : B0_SendMessageTuple(0x0A,  True, False),      # Mark: Tamper Activities
     B0SubType.TAMPER_ALERT          : B0_SendMessageTuple(0x0B,  True, False),      # Mark: Tamper Alert
-    B0SubType.WIRELESS_DEV_ONEWAY   : B0_SendMessageTuple(0x0E,  True, False),
+    B0SubType.WIRELESS_DEV_MISSING  : B0_SendMessageTuple(0x0E,  True, False),
     B0SubType.PANEL_STATE_2         : B0_SendMessageTuple(0x0F, False, False),      # Panel State 2, confirmed as not chunky
     B0SubType.TRIGGERED_ZONE        : B0_SendMessageTuple(0x13,  True, False),      # Triggered Zone ... maybe????????????????  0d b0 03 13 0d ff 01 03 08 00 00 00 00 00 00 00 00 da 43 02 0a  Decoded Chunk type 3   subtype 19   sequence 255  datasize 1    length 8    index ZONES            data 00 00 00 00 00 00 00 00
     B0SubType.ZONE_OPENCLOSE        : B0_SendMessageTuple(0x18,  True, False),      # Sensor Open/Close State
@@ -197,7 +200,7 @@ pmSendMsgB0 = {   #                                      data  chunky paged
     B0SubType.INVESTIGATION_16 : B0_SendMessageTuple(0x16,  True, False),
     B0SubType.INVESTIGATION_1A : B0_SendMessageTuple(0x1A,  True, False),
     B0SubType.INVESTIGATION_1B : B0_SendMessageTuple(0x1B,  True, False),
-    B0SubType.INVESTIGATION_1C : B0_SendMessageTuple(0x1B,  True, False),
+    B0SubType.INVESTIGATION_1C : B0_SendMessageTuple(0x1C,  True, False),
     B0SubType.INVESTIGATION_1E : B0_SendMessageTuple(0x1E,  True, False),
     B0SubType.INVESTIGATION_30 : B0_SendMessageTuple(0x30,  True, False),
     B0SubType.INVESTIGATION_32 : B0_SendMessageTuple(0x32,  True, False),
@@ -209,18 +212,23 @@ pmSendMsgB0 = {   #                                      data  chunky paged
     B0SubType.INVESTIGATION_49 : B0_SendMessageTuple(0x49,  True, False),
     B0SubType.INVESTIGATION_4E : B0_SendMessageTuple(0x4E,  True, False),
     B0SubType.INVESTIGATION_4F : B0_SendMessageTuple(0x4F,  True, False),
-
-
 }
 
 # Create a reverse lookup e.g. given the 0x0A then get the enumeration B0SubType.TAMPER_ACTIVITY
-pmSendMsgB0_reverseLookup = { v.data : B0_SendMessageTuple(k, v.chunky, v.paged) for k,v in pmSendMsgB0.items() }
+pmSendMsgB0_reverseLookup: dict[int | B0SubType, B0_SendMessageTuple] = { v.data : B0_SendMessageTuple(k, v.chunky, v.paged) for k,v in pmSendMsgB0.items() }
 
 # Entry in a queue of commands (and PDUs) to send to the panel
 class VisonicListEntry:
     """This is an entry in the queue of commands to send to the panel."""
 
-    def __init__(self, command : VisonicCommand | None = None, raw : bytearray | None = None, options : list[tuple[int,int|bytearray]] | None = None, response : list[Receive] | None = None) -> None:
+    def __init__(
+        self,
+        command : VisonicCommand | None = None,
+        raw : bytearray | None = None,
+        options : list[tuple[int,int|bytearray]] | None = None,
+        response : list[Receive] | None = None,
+        b0_request_tags: frozenset[int] = frozenset()
+    ) -> None:
         """Initialise list entry."""
         self.command : VisonicCommand | None = command
         self.options : list[tuple[int,int|bytearray]] | None = options
@@ -237,6 +245,8 @@ class VisonicListEntry:
             if self.command.waitforack:
                 self.response.append(Receive.ACKNOWLEDGE)  # add an acknowledge to the list
 
+        self.b0_request_tags = b0_request_tags
+        self.queued_at: float | None = None
         self.tried_resending_message = False
         self.created = get_local_time()
 
@@ -266,12 +276,13 @@ class VisonicListEntry:
         # log.debug(f"[send_pdu] Options {instruction.options} {op}")
         for opt in self.options:
             s, a = opt   # bit offset as an integer, the int or bytearray to insert
-            if isinstance(a, int):
-                data[s] = a
-            elif isinstance(a, bytearray): # type: ignore
-                data[s : s + len(a)] = a
-            else:
-                raise NotImplementedError
+            match a:
+                case int():
+                    data[s] = a
+                case bytearray():
+                    data[s : s + len(a)] = a
+                case _:
+                    raise NotImplementedError
         return data
 
 
@@ -279,15 +290,35 @@ class VisonicListEntry:
 class PriorityQueueWithPeek(asyncio.PriorityQueue[tuple[int, VisonicListEntry]]):
     """Extend the PriorityQueue builtin to peek and find."""
 
+    _queue: list[tuple[int, VisonicListEntry]]
+
     def _items(self) -> list[tuple[int, VisonicListEntry]]:
         """Internal helper to access underlying heap queue safely."""
-        return cast(list[tuple[int, VisonicListEntry]], self._queue) # type: ignore[attr-defined]
+        return self._queue
 
     def peek_nowait(self) -> tuple[int, VisonicListEntry]:
         """Peek in to the priority queue."""
         if self.empty():
             raise asyncio.QueueEmpty
         return self._items()[0]                   # PriorityQueue is an ordered list so look at the head of the list
+
+    def pending_b0_tags(self, tags: set[int], priority: int) -> set[int]:
+        """Find queued B0 reads and promote overlapping requests."""
+        pending: set[int] = set()
+        promoted = False
+        for i, (queued_priority, entry) in enumerate(self._items()):
+            pending.update(entry.b0_request_tags)
+            if entry.b0_request_tags.intersection(tags) and priority < queued_priority:
+                self._items()[i] = (priority, entry)
+                promoted = True
+        if promoted:
+            heapify(self._items())
+        return pending
+
+    def oldest_age(self, now: float) -> float:
+        """Measure queued age independently of message priority and wall time."""
+        oldest = min((entry.queued_at for _, entry in self._items() if entry.queued_at is not None), default=now)
+        return max(0.0, now - oldest)
 
     def find(self, v: VisonicListEntry) -> tuple[int, VisonicListEntry] | None:
         """Find in the priority queue."""
@@ -296,8 +327,7 @@ class PriorityQueueWithPeek(asyncio.PriorityQueue[tuple[int, VisonicListEntry]])
         for item in self._items():
             _, entry = item
             if (
-                isinstance(entry, VisonicListEntry) # type: ignore
-                and v.command == entry.command
+                v.command == entry.command
                 and v.raw == entry.raw
                 and v.options == entry.options
             ):

@@ -22,7 +22,7 @@ class AlGenericDevice(AlDeviceCommon):
         self.low_battery = False
         self.model = model
         self.device_name = device_name
-        self.location = location
+        self.location: str | None = location
         self.enabled = enabled
         self._is_missing: bool | None = None
         self._is_inactive: bool | None = None
@@ -32,11 +32,11 @@ class AlGenericDevice(AlDeviceCommon):
     def __str__(self) -> str:
         """Convert the AlGenericDevice to a string."""
         strn = ""
-        strn = strn + ("type=None" if self._device_type is None else f"type={self._device_type.name}") # pyright: ignore[reportUnnecessaryComparison]
-        strn = strn + ("id=None" if self._device_id is None else f"id={self._device_id:<2}") # pyright: ignore[reportUnnecessaryComparison]
+        strn = strn + f"type={self._device_type.name}"
+        strn = strn + f"id={self._device_id:<2}"
         strn = strn + (" Model=None          " if self.model is None else f" Type={self.model:<15}")
-        strn = strn + (" Name=None           " if self.device_name is None else f" Name={self.device_name:<15}") # pyright: ignore[reportUnnecessaryComparison]
-        strn = strn + (" Loc=None          " if self.location is None else f" Loc={self.location:<14}") # type: ignore
+        strn = strn + f" Name={self.device_name:<15}"
+        strn = strn + (" Loc=None          " if self.location is None else f" Loc={self.location:<14}")
         strn = strn + (f" enabled={self.enabled:<2}")
         return strn + (f" state={self._state:<8}")
 

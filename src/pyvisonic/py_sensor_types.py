@@ -69,7 +69,7 @@ pmZoneEventAction: Final[dict[int, ZoneEventActionCollection]] = {
 }
 
 pmSirenMaster : Final[dict[int, str]] = {
-    0x01 : "SR-730 PG2 Outdoor Siren",
+    0x01 : "SR-740 PG2 Outdoor Siren",
     0x02 : "SR-720 PG2 Indoor Siren",
 }
 

@@ -8,8 +8,13 @@ from typing import override
 from serialx import BaseSerialTransport, SerialException
 
 from .client_connection_test import async_close_transport, async_open_connection
-from .client_maintain_interface import ConnectionStatus, MaintainInterface
-from .client_types import ConnectionType, VisonicClientCallbacks, VisonicClientSettings
+from .client_maintain_interface import MaintainInterface
+from .client_types import (
+    ConnectionStatus,
+    ConnectionType,
+    VisonicClientCallbacks,
+    VisonicClientSettings,
+)
 from .py_enum import AlCommandStatus, AlTerminationType
 from .py_exception import PyVisonicException
 from .py_visonic import VisonicProtocol as create_visonic_protocol
@@ -25,6 +30,7 @@ class ManageConnection(MaintainInterface):
         callbacks: VisonicClientCallbacks | None = None,
     ) -> None:
         """Initialize without starting background work until connect is called."""
+        self._recovery_stop_latched = False
         self._management_task: asyncio.Task[None] | None = None
         self._wait_task: asyncio.TimerHandle | None = None
         self._requested_state = ConnectionStatus.READY_TO_START
@@ -148,6 +154,8 @@ class ManageConnection(MaintainInterface):
 
     def _kick_off_next_step(self, command: ConnectionStatus) -> None:
         """Create a step for the manager."""
+        if self._recovery_stop_latched and command != ConnectionStatus.STOP:
+            return
         self._requested_state = command
         self._reevaluate_connection.set()
 
@@ -155,6 +163,12 @@ class ManageConnection(MaintainInterface):
         self, state: ConnectionStatus, cvp: VisonicProtocolClient | None = None
     ) -> None:
         """Callback from protocol CVP to handle connections and disconnections."""
+        if self._recovery_stop_latched:
+            return
+        if state == ConnectionStatus.DISCONNECTED and self._visonic_protocol is not None and self._visonic_protocol.recovery_in_progress:
+            if self._visonic_protocol.recovery_listening:
+                self.on_panel_problem(AlTerminationType.FLOOD_RECOVERY_FAILED)
+            return
         if state == ConnectionStatus.CONNECTED:
             self._disconnection_counted = False
         elif state == ConnectionStatus.DISCONNECTED:
@@ -172,6 +186,7 @@ class ManageConnection(MaintainInterface):
 
     def connect(self) -> bool:
         """Connect to the alarm panel using the pyvisonic library."""
+        self._recovery_stop_latched = False
         if self._management_task is None or self._management_task.done():
             self._management_task = asyncio.create_task(
                 self.connection_manager(),
@@ -441,6 +456,21 @@ class ManageConnection(MaintainInterface):
     def on_panel_problem(self, termination: AlTerminationType) -> None:
         """Problem Callback for connection disruption to the panel."""
 
+        if termination == AlTerminationType.FLOOD_RECOVERY_COMPLETE:
+            self.logger.warning("RECOVERY completed; recreating protocol and transport")
+            self._kick_off_next_step(ConnectionStatus.RESTART)
+            self._notify_state_changed()
+            return
+        if termination == AlTerminationType.FLOOD_RECOVERY_FAILED:
+            self._recovery_stop_latched = True
+            self.logger.error("Flood RECOVERY failed; connection stopped without automatic retry")
+            self._kick_off_next_step(ConnectionStatus.STOP)
+            if self.callbacks.problem is not None:
+                self.callbacks.problem(termination)
+            self._notify_state_changed()
+            return
+        if self._recovery_stop_latched:
+            return
         if termination == AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED:
             self._record_disconnection()
         self._max_connection_attempts = int(self.settings.retry_count)

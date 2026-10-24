@@ -326,7 +326,17 @@ class MessageHandlingB0Data(MessageHandlingBase):
 #            if not OBFUS:
             log.debug(f"[_extract_42_data]               NOT PROCESSED dat = {dat}")
 
-    def _decode_24(self, partition_count : int, date_data: bytearray, unknown_data : bytearray, partition_data : bytearray) -> None:
+    def _decode_24(self, panel_data: bytearray, partition_count : int, date_data: bytearray, unknown_data : bytearray, partition_data : bytearray) -> None:
+
+        control_flags = panel_data[4]
+        panel_battery_trouble = bool(control_flags & 0x02)
+        panel_tamper = bool(control_flags & 0x40)
+        panel_communication_trouble = bool(control_flags & 0x20)
+
+        for state in self.partition_state:
+            state.panel_battery_trouble = panel_battery_trouble
+            state.panel_tamper = panel_tamper
+            state.panel_communication_trouble = panel_communication_trouble
 
         i_sec = date_data[0]
         i_min = date_data[1]
@@ -350,6 +360,9 @@ class MessageHandlingB0Data(MessageHandlingBase):
             offset = i * 4
             # Repeat 4 bytes (17 to 20) for more than 1 partition, assume 19 and 20 are zone data
             self._update_partition_status(i, partition_data[offset], partition_data[offset + 1], partition_data[offset + 2], partition_data[offset + 3])
+
+        self._b0_last_decoded_panel_state = self.loop.time()
+        self._b0_panel_state_deferred = False
 
     def _decode_4b(self, sensor_identifier: int, data: bytearray) -> None:
         # Get local time
@@ -562,7 +575,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
             case (B0SubType.PANEL_STATE_1,      RAW.BYTE, IndexName.MIXED,  20):
                 # Panel state change, added just in case the panel abbreviates this message
                 # 06 00 00 00 02 00 00 00 29 0b 10 08 0b 18 14 06 00 85 00 00
-                #_decode_24(ch.data, 8, 14, 1, 17)
+                #_decode_24(ch.data[0:8], 8, 14, 1, 17)
                 #self.b0_last_panel_state_time = get_utc_time()
                 log.debug(f"[handle_msgtypeB0]              {notknown} Got a short Panel State Message but not processing it ch={ch}")
 
@@ -571,7 +584,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 # e.g. 06 00 00 00 02 00 00 00 29 0b 10 08 0b 18 14 06 01 00 85 00 00
                 if ch.data[16] == 1:   # partition count set to 1
                     # We already know that the length of the ch.data is 21 so no need to check it
-                    self._decode_24(1, ch.data[8:14], ch.data[14:16], ch.data[17:21])
+                    self._decode_24(ch.data[0:8], 1, ch.data[8:14], ch.data[14:16], ch.data[17:21])
                     self.b0_last_panel_state_time = get_utc_time()
                 else:
                     log.debug(f"[handle_msgtypeB0]              {notknown} Got a normal Panel State Message but not processing it because the partition count in the message is not 1 ch={ch}")
@@ -582,11 +595,11 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 # e.g. 0b 00 00 00 00 00 00 00 22 32 14 03 05 19 14 07 00 85 00 00 00 85 00 00 00 85 00 00
                 if self.get_partitions_in_use() is not None:              # we have a 24 message that has extended data (for the partitions) and the panel has reported it has partitions in use
                     # We already know that the length of the ch.data is 28 so no need to check it
-                    self._decode_24(3, ch.data[8:14], ch.data[14:16], ch.data[16:28])
+                    self._decode_24(ch.data[0:8], 3, ch.data[8:14], ch.data[14:16], ch.data[16:28])
                     self.b0_last_panel_state_time = get_utc_time()
                 else:
                     log.debug(f"[handle_msgtypeB0]              {notknown} Got a long Panel State Message but the partition count is 1, processing it anyway ch={ch}")
-                    self._decode_24(3, ch.data[8:14], ch.data[14:16], ch.data[16:28])
+                    self._decode_24(ch.data[0:8], 3, ch.data[8:14], ch.data[14:16], ch.data[16:28])
                     self.b0_last_panel_state_time = get_utc_time()
                 self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_28", to_string(ch.data[0:8]))
 
@@ -595,11 +608,11 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 # e.g. 07 00 00 00 02 00 00 00 10 1d 0a 0a 0b 18 14 01 03 00 87 00 00 00 87 00 00 00 07 00 00
                 if self.get_partitions_in_use() is not None:              # we have a 24 message that has extended data (for the partitions) and the panel has reported it has partitions in use
                     # We already know that the length of the ch.data is 29 so no need to check it
-                    self._decode_24(ch.data[16], ch.data[8:14], ch.data[14:16], ch.data[17:29])
+                    self._decode_24(ch.data[0:8], ch.data[16], ch.data[8:14], ch.data[14:16], ch.data[17:29])
                     self.b0_last_panel_state_time = get_utc_time()
                 else:
                     log.debug(f"[handle_msgtypeB0]              {notknown} Got a really long Panel State Message but the partition count is 1, processing it anyway ch={ch}")
-                    self._decode_24(ch.data[16], ch.data[8:14], ch.data[14:16], ch.data[17:29])
+                    self._decode_24(ch.data[0:8], ch.data[16], ch.data[8:14], ch.data[14:16], ch.data[17:29])
                     self.b0_last_panel_state_time = get_utc_time()
                 self._check_unknown("[handle_msgtypeB0]              B0 Message PANEL_STATE_1 and the first 8 bytes", "handle_msgtypeB0_PANEL_STATE_1_29", to_string(ch.data[0:8]))
 
@@ -832,8 +845,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 log.debug(f"[handle_msgtypeB0]          Received ASK_ME_1 pop message   {ch}")
                 if self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.STANDARD_PLUS, AlPanelMode.STANDARD]:
                     if ch.length > 0:
-                        s = self._create_b0_data_request(taglist = set(ch.data))
-                        self.add_message_to_send_queue(s, priority = MessagePriority.URGENT)
+                        self._queue_b0_data_request(set(ch.data), MessagePriority.URGENT)
                     else:
                         log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_1 chunk={ch.get_it_all()}")
 
@@ -841,14 +853,12 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 log.debug(f"[handle_msgtypeB0]          Received ASK_ME_2 pop message   {ch}")
                 if self.panel_mode in [AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED, AlPanelMode.STANDARD_PLUS, AlPanelMode.STANDARD]:
                     if ch.length > 0:
-                        s = self._create_b0_data_request(taglist = set(ch.data))
-                        self.add_message_to_send_queue(s, priority = MessagePriority.URGENT)
+                        self._queue_b0_data_request(set(ch.data), MessagePriority.URGENT)
                     else:
                         #log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_2 chunk={ch.get_it_all()}   so asking for PANEL_STATE_1 and ZONE_LAST_EVENT")
                         #s = self._create_b0_data_request(taglist = {pmSendMsgB0[B0SubType.PANEL_STATE_1].data, pmSendMsgB0[B0SubType.ZONE_LAST_EVENT].data} )
                         log.debug(f"[handle_msgtypeB0]                   Empty ASK_ME_2 chunk={ch.get_it_all()}   so asking for PANEL_STATE_1")
-                        s = self._create_b0_data_request(taglist = B0SubType.PANEL_STATE_1 )
-                        self.add_message_to_send_queue(s, priority = MessagePriority.URGENT)
+                        self._queue_b0_data_request(B0SubType.PANEL_STATE_1, MessagePriority.URGENT)
 
             case (B0SubType.ZONE_LAST_EVENT,    RAW.FIVE_BYTE, IndexName.ZONE,  _ ):  # Each entry is ch.datasize=40 bits (or 5 bytes)
                 if seq_type == SEQUENCE.SUB:

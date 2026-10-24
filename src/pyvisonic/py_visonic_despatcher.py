@@ -26,7 +26,7 @@ from .py_enum import (
     Receive,
     Send,
 )
-from .py_types_sending import VisonicListEntry
+from .py_types_sending import VisonicListEntry, pmSendMsg
 from .py_utils import get_utc_time, to_string
 from .py_visonic_devices import ManageDevices
 
@@ -68,13 +68,21 @@ class Despatcher(ManageDevices):
 
         self.b0_wanted: set[int | B0SubType] = set()
         self.b0_waiting: set[int | B0SubType] = set()
+        self._b0_last_decoded_panel_state: float | None = None
+        self._b0_panel_state_deferred = False
+        self._b0_pending_requests.clear()
         self.b0_last_panel_state_time = get_utc_time()
         self._triggered_download = False
 
     def _reset_connection(self) -> None:
         """Reset the variables needed to make a new connection."""
         super()._reset_connection()
+        self._b0_pending_requests.clear()
+        self._b0_last_decoded_panel_state = None
+        self._b0_panel_state_deferred = False
+        self.b0_waiting.clear()
         # This is the time stamp of the last Send
+        self._panel_details_sent_at: float | None = None
         self._last_transaction_time = get_utc_time() - timedelta(seconds=1)  # take off 1 second so the first command goes through immediately
         # keep alive counter for the timer
         self._reset_keep_alive_messages()  # only used in _sequencer
@@ -88,6 +96,11 @@ class Despatcher(ManageDevices):
         self._send_data = None
         self._stop_despatcher()
         self._empty_send_queue(priority = MessagePriority.DELETE_ALL)
+        self._b0_pending_requests.clear()
+        self._b0_last_decoded_panel_state = None
+        self._b0_panel_state_deferred = False
+        self.b0_waiting.clear()
+        self.b0_wanted.clear()
 
     async def wait_for_send_data_func(self, s : int) -> None:
         """Wait for the callback to be valid."""
@@ -113,7 +126,11 @@ class Despatcher(ManageDevices):
         self._reset_watchdog_timeout()
         self._reset_keep_alive_messages()
         self._clear_receive_response_list()
-        self._empty_send_queue(priority = MessagePriority.DELETE_ALL)  # empty the list
+        self._empty_send_queue(priority = MessagePriority.DELETE_ALL)
+        self._b0_pending_requests.clear()
+        self._b0_last_decoded_panel_state = None
+        self._b0_panel_state_deferred = False
+        self.b0_waiting.clear()
 
     def _stop_despatcher(self) -> None:
         """Stop the despatcher."""
@@ -183,10 +200,16 @@ class Despatcher(ManageDevices):
             return -1.0
 
         # Function to send all PDU messages to the panel
+        ack_recovery_until = 0.0
+
+        def is_ack(entry: VisonicListEntry) -> bool:
+            return entry.command is not None and entry.command.data[0] == Receive.ACKNOWLEDGE
+
         def send_pdu(instruction: VisonicListEntry | None) -> tuple[DespatchError, float]:        # return the delay before sending the next PDU
             """Encode and put packet string onto write buffer."""
+            nonlocal ack_recovery_until
 
-            if self.suspend_all_operations:
+            if self.suspend_all_operations or self._recovery.silent:
                 log.debug("[sendPdu] Suspended all operations, not sending PDU")
                 return DespatchError.SUSPENDED, -1.0
 
@@ -231,7 +254,13 @@ class Despatcher(ManageDevices):
 
             # Write the data to the data send callback
             self._first_cmd_sent = True
+            if instruction.b0_request_tags:
+                now = self.loop.time()
+                self._b0_pending_requests.update(dict.fromkeys(instruction.b0_request_tags, now))
+                self.b0_waiting.update(instruction.b0_request_tags)
             self._send_data(data_out)
+            if command == pmSendMsg[Send.PANEL_DETAILS]:
+                self._panel_details_sent_at = self.loop.time()
             self._last_transaction_time = get_utc_time()
 
             if data_out[1] != Receive.ACKNOWLEDGE:
@@ -252,6 +281,9 @@ class Despatcher(ManageDevices):
                 # Assume raw data to send is not obfuscated for now
                 log.debug(f"[sendPdu] Sent Raw Command      raw data {to_string(data_out[:4] if OBFUS else data_out)}   waiting for message response {[hex(no).upper() for no in self.pm_expected_response]}")
 
+            if data_out[1] == Receive.ACKNOWLEDGE:
+                ack_recovery_until = self.loop.time() + (command.waittime if command is not None else 0.0)
+                return DespatchError.SUCCESS, -1.0
             if command is not None and command.waittime > 0.0:
                 return DespatchError.SUCCESS, command.waittime
             return DespatchError.SUCCESS, -1.0
@@ -262,12 +294,15 @@ class Despatcher(ManageDevices):
         while not self.suspend_all_operations:
             try:
                 await self._pause_event.wait()  # pauses here if cleared
+                if self._recovery.silent:
+                    await asyncio.sleep(0.1)
+                    continue
                 post_delay: float = 0.01
                 # calc the time interval between sending the last message and now
                 interval = get_utc_time() - self._last_transaction_time
                 write_status = DespatchError.SUCCESS  # combined with post_delay creates a small delay in the loop if nothing to process
 
-                if len(self.pm_expected_response) == 0 or (not self._is_send_queue_empty() and check_queue_priority_level() < 2):
+                if len(self.pm_expected_response) == 0 or (not self._is_send_queue_empty() and check_queue_priority_level() <= MessagePriority.ACK):
                     # Here when either:
                     #     The expected response list is empty so we're not waiting for a specific message to be received before sending the next
                     #             in this case the get function will block waiting
@@ -275,7 +310,8 @@ class Despatcher(ManageDevices):
                     #             immediate pdu's are commanded by the user e.g. arm, disarm etc
                     # ensure that there is a minimum delay between sending messages to the panel
                     #log.debug(f"[_despatcher]  Loopy")
-                    if (s := sleepytime(interval)) > 0.0:
+                    # Only PowerMaster ACKs bypass pacing; slower panels need the gap.
+                    if (not self.is_power_master() or self._is_send_queue_empty() or not is_ack(self._send_queue.peek_nowait()[1])) and (s := sleepytime(interval)) > 0.0:
                         # If needed, create a minimum time delay between sending the panel messages as the panel can't cope (not enough CPU power and bandwidth on the serial link)
                         #log.debug(f"[_despatcher]  sleeping for {s} seconds")
                         await asyncio.sleep(s)
@@ -284,10 +320,17 @@ class Despatcher(ManageDevices):
                         #log.debug(f"[_despatcher] Start Get      queue size {self._send_queue.qsize()}")
                         # pop the highest priority and oldest item from the list, this could be the only item.
                         d = await self._send_queue.get()  # this blocks waiting for something to be added to the queue, nothing else is relevant as pm_expected_response is empty and can only be added to by calling send_pdu
+                        if self.is_power_master() and is_ack(d[1]) and (remaining := ack_recovery_until - self.loop.time()) > 0.0:
+                            # Keep ACK recovery interruptible by higher-priority commands.
+                            self._send_queue.put_nowait(d)
+                            self._send_queue.task_done()
+                            await asyncio.sleep(min(remaining, 0.01))
+                            continue
                         #log.debug(f"[_despatcher] Get worked and got something priority={d[0]}          queue size {self._send_queue.qsize()}")
 
                         # since we might have been waiting for something to send, check it again :)
                         if not self.suspend_all_operations:
+                            d[1].queued_at = None
                             instruction: VisonicListEntry = d[1]   # PriorityQueue is put as a tuple (priority, viscommand), so get the viscommand
                             if len(instruction.response) > 0:
                                 # update the expected response list straight away (without having to wait for it to be actually sent) to make sure protocol is followed
