@@ -3,7 +3,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from .py_const import TIME_INTERVAL_ERROR, notknown
@@ -110,7 +110,8 @@ class MessageHandlingBase(Sequencer):
         settime = self.auto_sync_time  # should we sync time between the HA and the Alarm Panel
         if t.year > 2000:
             # Regardless of whether we autosync time, calculate the time difference
-            self.panel_integration_time_difference = t - paneltime
+            # Panel timestamps contain local clock fields without a timezone.
+            self.panel_integration_time_difference = t.replace(tzinfo=None) - paneltime.replace(tzinfo=None)
             d = self.panel_integration_time_difference.total_seconds()
             log.debug(f"[_set_time_in_panel]      Local time is {t}      time difference {d} seconds")
             if abs(d) < TIME_INTERVAL_ERROR:
@@ -124,7 +125,8 @@ class MessageHandlingBase(Sequencer):
             if self.panel_integration_time_counter > 2:  # The time difference has to exceed the TIME_INTERVAL_ERROR for 3 times in a row.
                 self.panel_integration_time_counter = 0
                 log.debug(f"[_set_time_in_panel]      Setting time in panel to {t}     paneltime is currently {paneltime}")
-                time_pdu = bytearray([t.second + 1, t.minute, t.hour, t.day, t.month, t.year - 2000])   # add about 1 seconds on as it takes over 1 to get to the panel to set it
+                target = t + timedelta(seconds=1)
+                time_pdu = bytearray([target.second, target.minute, target.hour, target.day, target.month, target.year - 2000])
                 # Set these as IMMEDIATE to get them to the panel asap (so the time is set asap to synchronise panel and local time)
                 self.add_message_to_send_queue(Send.DOWNLOAD_TIME, priority = MessagePriority.IMMEDIATE, options=[ (3, convert_bytearray(self.download_code)) ])
                 self.add_message_to_send_queue(Send.SETTIME, priority = MessagePriority.IMMEDIATE, options=[ (3, time_pdu) ])

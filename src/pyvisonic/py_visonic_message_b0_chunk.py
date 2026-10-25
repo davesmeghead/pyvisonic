@@ -346,7 +346,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
         i_year = date_data[5]
 
         # Attempt to check and correct time
-        pt = datetime(2000 + i_year, i_month, i_day, i_hour, i_min, i_sec).astimezone()
+        pt = datetime(2000 + i_year, i_month, i_day, i_hour, i_min, i_sec)
         self._set_time_in_panel(pt)
         messagedate = f"{i_day:0>2}/{i_month:0>2}/{i_year}   {i_hour:0>2}:{i_min:0>2}:{i_sec:0>2}"
 
