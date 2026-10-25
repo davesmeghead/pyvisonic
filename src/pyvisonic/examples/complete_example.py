@@ -366,8 +366,9 @@ class MyAsyncConsole(App[None]):
         """Handle a command entered by the user."""
         command: str = event.value
         # Add command to the input history.
-        ei: CommandInput = CommandInput(event.input)
-        ei.add_history(command)
+        ei = event.input            # the existing input widget (was: CommandInput(event.input), which crashes)
+        if isinstance(ei, CommandInput):
+            ei.add_history(command)
         await self._input_queue.put(event.value)
         # Clear input ready for the next command.
         event.input.value = ""
