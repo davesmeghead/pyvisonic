@@ -4,10 +4,12 @@ An asyncio interface to Visonic PowerMax and PowerMaster alarm panels, including
 PowerMax+, PowerMaxExpress, PowerMaxPro, PowerMaxComplete, PowerMaster 10 and
 PowerMaster 30. Python 3.14 or newer is required.
 
-This library does not make any physical / transport connections to a device or panel.
-This library is a protocol, you make the connection to the panel and the library:
-- Is given the received serial data from the panel
-- Provides the serial data to send to the panel
+The library includes `VisonicClient`, which connects to a panel through a local
+serial port or a TCP/IP serial adapter. It manages the connection, protocol
+startup, reconnection, panel commands and state callbacks.
+
+Applications that manage their own transport can use `VisonicProtocol` directly
+to process incoming panel data and generate outgoing protocol messages.
 
 A PowerLink device is not required; do not use this library with PowerLink hardware.
 See the [hardware and configuration wiki](https://github.com/davesmeghead/visonic/wiki).
@@ -98,8 +100,8 @@ python -m pyvisonic.examples.simple_example -usb /dev/ttyUSB0 -baud 9600
 ```
 
 Use `--help` to see the available options. The common connection adapter is in
-`pyvisonic.examples.example_common`. The library itself depends on Pillow;
-serial and user interface dependencies are provided by the `examples` extra.
+`pyvisonic.examples.example_common`. The library depends on Pillow and serialx;
+additional dependencies for the examples are provided by the `examples` extra.
 
 ## Build a release
 
