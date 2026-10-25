@@ -716,7 +716,7 @@ class MessageHandling(MessageHandlingB0Data):
             # Panel Time
             log.debug("[handle_msgtypeAB] ***************************** Got Panel Time ****************************")
 
-            pt = datetime(2000 + data[7], data[6], data[5], data[4], data[3], data[2]).astimezone()
+            pt = datetime(2000 + data[7], data[6], data[5], data[4], data[3], data[2])
             log.debug(f"[handle_msgtypeAB]    Panel time is {pt}")
             self._set_time_in_panel(pt)
             self._check_unknown("[handle_msgtypeAB]              AB Message 1 unknown byte is different to last time", f"handle_msgtypeAB_{sub_type}", data[1])
