@@ -163,7 +163,7 @@ pmDecodePanelSettings: dict[str | EPROM, SettingsCommand] = \
     "gsmSmsNrs"            : SettingsCommand( PSC.BOTH, Dumpy,  4, PDT.PHONE  ,   396,  64,   8,    -1,  ["1st SMS Tel","2nd SMS Tel","3rd SMS Tel","4th SMS Tel"], {} ),  #  396,404,412,420
     EPROM.DISPLAY_NAME     : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.STRING ,   428, 128,   0,    -1,  "Displayed String Panel Name",        {} ),   # This is shown on the display as it is centred in the string.  360 shows "SECURITY SYSTEM" for example
     "gsmAntenna"           : SettingsCommand( PSC.BOTH,  True,  1, PDT.BYTE   ,   447,   8,   0,    -1,  "GSM Select Antenna",                 { '0':"Internal antenna", '1':"External antenna", '2':"Auto detect"} ),
-    EPROM.USERCODE_MAX     : SettingsCommand( PSC.MAX , Dumpy,  8, PDT.CODE   ,   506,  16,   1,    -1,  "PowerMax User Codes",                {} ),
+    EPROM.USERCODE_MAX     : SettingsCommand( PSC.MAX , Dumpy,  8, PDT.CODE   ,   506,  16,   2,    -1,  "PowerMax User Codes",                {} ),
     EPROM.MASTERCODE       : SettingsCommand( PSC.MAS , Dumpy,  1, PDT.CODE   ,   522,  16,   0,    -1,  "Master Code",                        {} ),
     EPROM.INSTALLERCODE    : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.CODE   ,   524,  16,   0,    -1,  "Installer Code",                     {} ),
     EPROM.MASTERDLCODE     : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.CODE   ,   526,  16,   0,    -1,  "Master Download Code",               {} ),
