@@ -150,3 +150,33 @@ def test_panel_identifier_without_download(panel: VisonicProtocol) -> None:
     panel.panel_settings[PanelSetting.PanelIdent].data = ident
 
     assert panel.get_panel_ident() == ""
+
+
+@pytest.mark.parametrize(
+    ("setting", "code_count", "slot"),
+    [
+        pytest.param(EPROM.USERCODE_MAX, 8, 0, id="powermax-first"),
+        pytest.param(EPROM.USERCODE_MAX, 8, 1, id="powermax-second"),
+        pytest.param(EPROM.USERCODE_MAX, 8, 7, id="powermax-last"),
+        pytest.param(EPROM.USERCODE_MAS, 48, 0, id="powermaster-first"),
+        pytest.param(EPROM.USERCODE_MAS, 48, 1, id="powermaster-second"),
+        pytest.param(EPROM.USERCODE_MAS, 48, 47, id="powermaster-last"),
+    ],
+)
+def test_user_code_slot_from_eprom(
+    panel: VisonicProtocol, setting: EPROM, code_count: int, slot: int
+) -> None:
+    """Decode adjacent packed decimal PINs and use the selected zero-based slot."""
+    codes = [f"{index + 1:04d}" for index in range(code_count)]
+    payload = bytearray.fromhex("".join(codes))
+    page, index = divmod(pmDecodePanelSettings[setting].poff, PAGE_SIZE)
+    panel.eprom_manager.save_eprom_settings(page, index, payload)
+    panel.eprom_manager.pm_download_complete = True
+
+    decoded = panel.eprom_manager.lookup_eprom(setting)
+
+    assert decoded == codes
+    panel.panel_settings[PanelSetting.UserCodes].data = decoded
+    panel.user_code_slot = slot
+    assert panel._get_user_code() == codes[slot]
+    assert panel._create_pin(None) == bytearray.fromhex(codes[slot])

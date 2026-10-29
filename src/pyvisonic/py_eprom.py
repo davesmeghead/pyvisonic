@@ -200,7 +200,7 @@ pmDecodePanelSettings: dict[str | EPROM, SettingsCommand] = \
     EPROM.PANEL_SERIAL     : SettingsCommand( PSC.BOTH,  True,  1, PDT.CODE   ,  1072,  48,   0,    -1,  "Panel Serial",                       {} ),   # page 4 offset 48
     EPROM.PANEL_MODEL_CODE : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.BYTE   ,  1078,   8,   0,    -1,  "Panel Model Code",                   {} ),   # page 4 offset 54 and 55 ->> Panel model code
     EPROM.PANEL_TYPE_CODE  : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.BYTE   ,  1079,   8,   0,    -1,  "Panel Type Code",                    {} ),   # page 4 offset 55
-    EPROM.USERCODE_MAS     : SettingsCommand( PSC.MAS , Dumpy, 48, PDT.CODE   ,  2712,  16,   1,    -1,  "PowerMaster User Codes",             {} ),
+    EPROM.USERCODE_MAS     : SettingsCommand( PSC.MAS , Dumpy, 48, PDT.CODE   ,  2712,  16,   2,    -1,  "PowerMaster User Codes",             {} ),
     EPROM.PANEL_IDENT      : SettingsCommand( PSC.BOTH, Dumpy,  1, PDT.CODE   ,  2852,  24,   0,    -1,  "Panel Ident",                        {} ),
     EPROM.SWITCH_ZONENAMES : SettingsCommand( PSC.BOTH, Dumpy, 16, PDT.BYTE   ,  2863,   8,   1,    -1,  "Switch Location Name references",    {} ),
     EPROM.ZONE_STR_NAM     : SettingsCommand( PSC.BOTH, Dumpy, 21, PDT.STRING ,  6400, 128,  16,    -1,  "Zone String Names Standard",         {} ),   # Zone String Names e.g "Attic", "Back door", "Basement", "Bathroom" etc 21 strings of 16 characters each
