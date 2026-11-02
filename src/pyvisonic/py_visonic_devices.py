@@ -254,7 +254,9 @@ class ManageDevices(ProtocolBase):
         created_new_sensor = False
 
         if sensor_identifier not in self.sensor_list:
-            self.sensor_list[sensor_identifier] = AlSensorDevice( sensor_id = sensor_identifier + 1 )
+            self.sensor_list[sensor_identifier] = AlSensorDevice(
+                sensor_id=sensor_identifier + 1, is_power_master=self.is_power_master()
+            )
             created_new_sensor = True
 
         zone_name = "not_installed"

@@ -386,7 +386,7 @@ class MessageHandlingB0Data(MessageHandlingBase):
                 triggered = False
                 if self.panel_integration_time_difference is not None:  # Can only be True if AB messages are processed, therefore Std+ or Powerlink
                     tolerance = 4 # seconds
-                    panel_time = t + self.panel_integration_time_difference
+                    panel_time = t - self.panel_integration_time_difference
                     diff = abs((trigger - panel_time).total_seconds())
                     log.debug(f"[_decode_4B]           Sensor Updated = {sensor.id:>2}  timenow = {t}  self.Panel_Integration_Time_Difference {self.panel_integration_time_difference.total_seconds()}    diff {diff}     panel_time {panel_time}     trigger {trigger}")
                     triggered = diff <= tolerance

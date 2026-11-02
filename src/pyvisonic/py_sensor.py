@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .py_abstract_classes import AlDeviceCommon
-from .py_enum import AlSensorCondition
+from .py_enum import AlSensorCapability, AlSensorCondition, AlSensorType
+from .py_sensor_metadata import get_sensor_details
 from .py_utils import get_local_time
 
 log = logging.getLogger(__name__)
@@ -15,10 +16,11 @@ log = logging.getLogger(__name__)
 class AlSensorDevice(AlDeviceCommon):
     """Class for sensor devices."""
 
-    def __init__(self, sensor_id: int) -> None:
+    def __init__(self, sensor_id: int, *, is_power_master: bool = False) -> None:
         """Initialise the sensor parameters."""
         # The variables that have _ are protected and have "do" functions and getters
         super().__init__()
+        self._is_power_master = is_power_master
         self._sensor_id: int = sensor_id            # immutable internal identity (creation-time)
         self.device_id: int = -1                    # external / panel / runtime ID
         self.raw_sensor_id: int | None = None       # hardware / protocol ID
@@ -29,7 +31,6 @@ class AlSensorDevice(AlDeviceCommon):
         self._is_missing: bool | None = None
         self._is_inactive: bool | None = None
         self._is_one_way: bool | None = None
-        #self._model: str | None = None
         self.jpg_timestamp: datetime | None = None
         self.jpg_data: bytearray | None = None
         self.jpg_is_audio: bool = False           # the buffer is the capture's audio clip, not a frame
@@ -149,6 +150,21 @@ class AlSensorDevice(AlDeviceCommon):
     def __ne__(self, other: object) -> bool:
         """Not equal operator for AlSensorDevice."""
         return not self.__eq__(other)
+
+    @property
+    def model(self) -> str:
+        """Return the sensor model name, or Unknown for an unlisted model."""
+        return get_sensor_details(self.raw_sensor_id, self._is_power_master).name
+
+    @property
+    def sensor_type(self) -> AlSensorType:
+        """Return the sensor's physical category."""
+        return get_sensor_details(self.raw_sensor_id, self._is_power_master).sensor_type
+
+    @property
+    def capabilities(self) -> frozenset[AlSensorCapability]:
+        """Return supported reports independently of current reading availability."""
+        return get_sensor_details(self.raw_sensor_id, self._is_power_master).capabilities
 
     @property
     def id(self) -> int:

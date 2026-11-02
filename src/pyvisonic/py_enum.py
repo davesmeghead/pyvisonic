@@ -527,6 +527,45 @@ class AlTroubleType(IntEnum):
     JAMMING = 7
     TELEPHONE = 8
 
+class AlSensorType(IntEnum):
+    """Physical sensor categories."""
+
+    IGNORED = 1
+    UNKNOWN = 2
+    MOTION = 3
+    MAGNET = 4
+    CAMERA = 5
+    WIRED = 6
+    SMOKE = 7
+    FLOOD = 8
+    GAS = 9
+    VIB = 10
+    SHOCK = 11
+    TEMP = 12
+    SOUND = 13
+    GLASS = 14
+    PANEL = 100
+    COMMS = 101
+    TOKEN = 102
+    SIREN = 103
+    SWITCH = 200
+
+
+class AlSensorCapability(StrEnum):
+    """Reporting supported by a sensor, even before a reading is available."""
+
+    STATE = "state"
+    TRIGGER = "trigger"
+    BATTERY = "battery"
+    TAMPER = "tamper"
+    PROBLEM = "problem"
+    MISSING = "missing"
+    ONE_WAY = "one_way"
+    INACTIVE = "inactive"
+    TEMPERATURE = "temperature"
+    ILLUMINANCE = "illuminance"
+
+
 # This is used for when AlCondition is set to ZONE_UPDATE to update the HA
 #   frontend and send out an HA Event
 class AlSensorCondition(Enum):
