@@ -37,10 +37,25 @@ Use the existing project's Publishing page, not a pending publisher for a new pr
 5. Check that PyPI lists the new version with Trusted Publishing and provenance.
 6. Update consuming applications to use the new version after testing it.
 
-A push to `main`, a pull request, or a manual workflow run only tests and builds;
-only a pushed version tag can publish. The workflow rejects tags that do not
+A push to `main` or a pull request only tests and builds. A pushed version tag
+or a manual release workflow can publish. The workflow rejects tags that do not
 match the installed package version. The publishing job downloads the artifacts
 from the build job and generates PyPI attestations through the official action.
+
+## Publish an existing tag with the current workflow
+
+Use this when an existing release tag needs a newer publishing workflow without
+moving the tag. Dispatch `publish.yml` from `main` and supply the existing tag as
+`release_tag`. The build checks out that tag and verifies that its name matches
+the package version before publishing through the current action.
+
+The `pypi` environment must allow the workflow's `main` branch, in addition to
+release tags, and still requires deployment approval. If `main` is allowed only
+for this recovery, restore the original deployment policy after publication.
+
+```sh
+gh workflow run publish.yml --ref main -f release_tag=v4.1.3
+```
 
 ## Imported release
 
