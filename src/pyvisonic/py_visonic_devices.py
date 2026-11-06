@@ -34,7 +34,7 @@ from .py_panel_settings import (
     pmZoneChimeKey,
     pmZoneName,
 )
-from .py_panel_type_data import pmPanelConfig, pmPanelType
+from .py_panel_type_data import DEFAULT_PANEL_TYPE, pmPanelConfig, pmPanelType
 from .py_sensor import AlSensorDevice
 from .py_sensor_types import pmKeyfobNames, pmZoneEventAction
 from .py_switch import AlSwitchDevice
@@ -60,7 +60,7 @@ class ManageDevices(ProtocolBase):
         self.panel_capabilities : dict[IndexName, int]= {}
         self.eprom_manager : EPROMManager = EPROMManager()
         self.panel_status : dict[PanelStatusNames, Any] = {}                # This is the set of EPROM settings shown
-        self.panel_type : int = 17                                # We do not yet know the paneltype so set default settings
+        self.panel_type : int = DEFAULT_PANEL_TYPE                                # We do not yet know the paneltype so set default settings
         self.auto_enrol : bool = True
         self.auto_sync_time : bool = False
         # These are populated when we know the panel type from the 3C message
@@ -481,7 +481,7 @@ class ManageDevices(ProtocolBase):
             else:
                 log.debug(f"[_set_data_from_panel_type] Using Download Code {self.download_code}")
 
-            if 0 <= self.panel_type <= len(pmPanelConfig[CFG.SUPPORTED]) - 1:
+            if self.panel_type in pmPanelConfig[CFG.SUPPORTED]:
                 is_supported = pmPanelConfig[CFG.SUPPORTED][self.panel_type]
                 if is_supported:
                     self.panel_model = pmPanelType.get(self.panel_type, "Unknown Panel") # INTERFACE : panel_type set to model

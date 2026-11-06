@@ -48,7 +48,7 @@ from .py_enum import (
     Send,
 )
 from .py_panel_settings import pmPanelSettingCodes, pmZoneName
-from .py_panel_type_data import pmPanelConfig
+from .py_panel_type_data import DEFAULT_PANEL_TYPE, pmPanelConfig
 from .py_sensor_image import AlImageManager
 from .py_switch import AlSwitchDevice
 from .py_types_sending import VisonicListEntry, pmSendMsgB0, pmSendMsgB0_reverseLookup
@@ -466,7 +466,7 @@ class Sequencer(Despatcher):
             """Retrieve Zone Names and Zone Types if needed."""
             # This function checks to determine if the Zone Names and Zone Types have been retrieved and if not it gets them
             retval = False
-            if 0 <= self.panel_type <= 16:
+            if self.panel_type in pmPanelConfig[CFG.SUPPORTED] and self.panel_type != DEFAULT_PANEL_TYPE:
                 retval = False
                 #zone_count = self._get_panel_capability(IndexName.ZONE)
                 zone_count = self._get_panel_capability(IndexName.ZONE)

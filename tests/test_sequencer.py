@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pyvisonic import VisonicProtocol
 from pyvisonic.py_const import WATCHDOG_MAXIMUM_EVENTS
-from pyvisonic.py_enum import AlPanelMode, Send
+from pyvisonic.py_enum import AlPanelMode, AlPanelStatus, Send
+from pyvisonic.py_panel_type_data import DEFAULT_PANEL_TYPE
 from pyvisonic.py_utils import get_local_time
 from pyvisonic.py_visonic_sequencer import SequencerType, _SequencerContext
 
@@ -208,3 +209,36 @@ async def test_panel_details_timeout_starts_at_transmission(
     ):
         await panel._sequencer()
     assert context.state == expected_state
+
+
+@pytest.mark.parametrize(
+    ("panel_type", "expected_commands"),
+    [
+        pytest.param(2, [Send.ZONENAME, Send.ZONETYPE], id="powermax-pro"),
+        pytest.param(87, [Send.ZONENAME, Send.ZONETYPE], id="powermax-pro-87"),
+        pytest.param(DEFAULT_PANEL_TYPE, [], id="default-profile"),
+    ],
+)
+async def test_standard_mode_requests_zone_names_for_sparse_panel_type(
+    panel: VisonicProtocol, panel_type: int, expected_commands: list[Send]
+) -> None:
+    assert panel._set_data_from_panel_type(panel_type, False)
+    panel.pm_got_panel_details = True
+    panel.panel_mode = AlPanelMode.STANDARD
+    panel.partition_state[0].panel_state_data = AlPanelStatus.DISARMED
+    context = _SequencerContext(
+        state=SequencerType.DoingStandard,
+        previous_state=SequencerType.DoingStandard,
+        counter=179,
+    )
+    with (
+        patch(f"{MODULE}._SequencerContext", return_value=context),
+        patch.object(panel, "add_message_to_send_queue") as send,
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await panel._sequencer()
+
+    commands = [call.args[0] for call in send.call_args_list]
+    assert [
+        command for command in commands if command in (Send.ZONENAME, Send.ZONETYPE)
+    ] == expected_commands
