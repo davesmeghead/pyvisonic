@@ -52,3 +52,30 @@ async def test_zone_events_still_go_to_sensors(panel: VisonicProtocol) -> None:
 
 def test_fail_to_arm_is_named() -> None:
     assert EventType(0x5D) is EventType.FAIL_TO_ARM
+
+
+async def test_a5_05_keyfob_low_battery_bitmap(panel: VisonicProtocol) -> None:
+    from pyvisonic.py_device import AlGenericDevice
+    from pyvisonic.py_enum import IndexName
+
+    panel.panel_capabilities[IndexName.KEYFOB] = 8
+    fobs = {}
+    for i in range(4):
+        key = AlGenericDevice.make_key(IndexName.KEYFOB, i)
+        fobs[i] = panel.device_list[key] = AlGenericDevice(IndexName.KEYFOB, id=i + 1, enabled=True)
+    seen = []
+    for d in fobs.values():
+        d.add_callback(lambda dev: seen.append((dev.as_dict()["id"], dev.low_battery)))
+
+    msg = bytearray([0x0D, 0x05, 0x0A, 0x00, 0x00, 0x0F, 0x00, 0x00, 0x12, 0x34, 0x43])
+    panel._handle_msgtype_a5(msg)
+    assert [fobs[i].low_battery for i in range(4)] == [False, True, False, True]
+    assert all(fobs[i].battery_reported for i in range(4))
+    assert sorted(seen) == [(1, False), (2, True), (3, False), (4, True)]   # first report always notifies
+
+    seen.clear()
+    panel._handle_msgtype_a5(msg)                                           # unchanged: no callbacks
+    assert seen == []
+    msg[2] = 0x08                                                           # fob 2 restored
+    panel._handle_msgtype_a5(msg)
+    assert seen == [(2, False)]

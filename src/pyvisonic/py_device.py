@@ -20,6 +20,7 @@ class AlGenericDevice(AlDeviceCommon):
         self._device_id: int = id
         self._state = True
         self.low_battery = False
+        self._battery_reported = False      # True once the panel has told us the battery state
         self.model = model
         self.device_name = device_name
         self.location: str | None = location
@@ -120,6 +121,22 @@ class AlGenericDevice(AlDeviceCommon):
         """Notify all callback handlers of a change."""
         for cb in list(self._callbacks):
             cb(self)
+
+    def do_battery(self, val: bool | None) -> bool:
+        """Do low battery update. The first report always notifies, so a client learns the state."""
+        if val is None:
+            return False
+        changed = not self._battery_reported or self.low_battery != val
+        self.low_battery = val
+        self._battery_reported = True
+        if changed:
+            self.notify()
+        return changed
+
+    @property
+    def battery_reported(self) -> bool:
+        """Get whether the panel has reported this device's battery state yet."""
+        return self._battery_reported
 
     def do_missing(self, val: bool | None) -> bool:
         """Do missing update."""

@@ -544,6 +544,15 @@ class MessageHandling(MessageHandlingB0Data):
 
                 self._do_sensor_update(data[6:10], VisonicFunctions.DO_BYPASS, "[handle_msgtypeA5]      Bypassed Zones 32-01")
 
+            case 5 if not self.is_power_master():
+                # PowerMax: 0d 05 0a 00 00 0f 00 00 12 34 43
+                # Byte 2 is the keyfob low-battery bitmap (bit 0 = keyfob 1). Observed on a PowerMax Complete:
+                # 00 -> 02 when keyfob 2 reported KEYFOB_LOW_BATTERY, -> 0a when keyfob 4 did too, and it stays
+                # set until the fob reports a restore. Unlike the A7 event, it is sent with every status update,
+                # so the battery state is known straight after (re)connecting. The other bytes are not decoded.
+                log.debug(f"[handle_msgtypeA5] Keyfob status: {to_string(data)}")
+                self._do_device_update(data[2:3], VisonicFunctions.DO_BATTERY, "[handle_msgtypeA5]      Keyfob Low Battery 08-01", IndexName.KEYFOB, 0, 8)
+
             case _:
                 # easiest way to check if its full of zeros
                 vala = b2i(data[2:6])
@@ -620,11 +629,9 @@ class MessageHandling(MessageHandlingB0Data):
                     device_id = AlGenericDevice.make_key(index_name, index)
                     if device_id in self.device_list:
                         if event_type == bad:
-                            self.device_list[device_id].low_battery = True
-                            self.device_list[device_id].notify()
+                            self.device_list[device_id].do_battery(True)
                         if event_type == good:
-                            self.device_list[device_id].low_battery = False
-                            self.device_list[device_id].notify()
+                            self.device_list[device_id].do_battery(False)
 
         msg_cnt = int(data[0])
         # If message count is FF then it looks like the first message is valid so decode it (this is experimental)
