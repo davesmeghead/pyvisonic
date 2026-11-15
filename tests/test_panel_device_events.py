@@ -79,3 +79,26 @@ async def test_a5_05_keyfob_low_battery_bitmap(panel: VisonicProtocol) -> None:
     msg[2] = 0x08                                                           # fob 2 restored
     panel._handle_msgtype_a5(msg)
     assert seen == [(2, False)]
+
+
+async def test_powermax_keyfob_model_from_eeprom(panel: VisonicProtocol) -> None:
+    from pyvisonic.py_device import AlGenericDevice
+    from pyvisonic.py_enum import IndexName
+    from pyvisonic.py_eprom import EPROMManager
+
+    em = EPROMManager()
+    page = bytearray([0xFF] * 256)
+    # Keyfob records from a PowerMax Complete: 4 bytes each at EEPROM 2424 (page 9, offset 120)
+    fobs = bytes.fromhex("e1001600" "bd001600" "8a9f1600" "969f1600") + bytes(16)
+    page[120:152] = fobs
+    em.pm_raw_settings = {9: page}
+    em.pm_download_complete = True
+    panel.eprom_manager = em
+    panel.panel_capabilities[IndexName.KEYFOB] = 8
+    panel.on_new_device(lambda create, dev: None)
+
+    devices = panel._process_eprom_keypads_sirens()
+    assert "KF01,KF02,KF03,KF04" in devices
+    for i in range(4):
+        assert panel.device_list[AlGenericDevice.make_key(IndexName.KEYFOB, i)].model == "MCT-234"
+    assert AlGenericDevice.make_key(IndexName.KEYFOB, 4) not in panel.device_list

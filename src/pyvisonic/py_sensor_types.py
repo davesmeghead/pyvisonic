@@ -82,6 +82,15 @@ pmKeyfobNames : Final[dict[int, str]] = {
     0x0A : "MCT-234",
 }
 
+# PowerMax keyfob model, keyed by byte 2 of the keyfob's EEPROM record (EPROM.KEYFOB_MAX).
+# pmKeyfobNames above is the PowerMaster B0 keyfob type and doesn't apply to these records:
+# its low nibble gave 0x16 -> 6 -> "MCT-237". 0x16 is what every keyfob showed on two
+# PowerMax panels (3 fobs on one, 4 MCT-234 on a PowerMax Complete); other values are
+# not known yet, so they get no model rather than a guessed one.
+pmKeyfobNamesPowerMax : Final[dict[int, str]] = {
+    0x16 : "MCT-234",
+}
+
 pmKeypadMaster : Final[dict[int, str]] = {
     0x05: "KP-160 PG2",
 }
