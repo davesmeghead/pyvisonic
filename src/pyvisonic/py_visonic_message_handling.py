@@ -70,6 +70,14 @@ def _is_capture_audio(record: ImageRecord) -> bool:
 
 log = logging.getLogger(__name__)
 
+# A5-04 zone events whose device is 0xFF come from the panel itself.  The event_type uses
+# the same numbering as pmZoneEventAction.  Only types confirmed from captures are mapped;
+# any other type is logged at WARNING so it can be reported and added here.
+#   name, EventType, whether it is a trouble condition that should update the partition state
+_PANEL_DEVICE_EVENTS: dict[int, tuple[str, EventType, bool]] = {
+    10 : ("Line Failure",          EventType.TELEPHONE_LINE_FAILURE, True),   # seen on a PowerMax Complete with no phone line
+}
+
 
 powermax_devices: dict[IndexName, int] = {
     IndexName.ZONE:             1,
@@ -413,6 +421,24 @@ class MessageHandling(MessageHandlingB0Data):
                 if self.panel_mode not in (AlPanelMode.POWERLINK, AlPanelMode.POWERLINK_BRIDGED) and (offset+i) in self.sensor_list:
                     self._update_sensor(sensor_identifier = offset+i)
 
+    def _process_panel_device_event(self, event_type: int) -> None:
+        """A5-04 zone event reported against device 0xFF, i.e. the panel itself.
+
+        These used to be dropped, which hid panel-level troubles (for example a failing
+        telephone line) behind a bare 'general trouble' flag.  Always log them, report the
+        mapped event to the client as a panel event (zone 0 = system), and let trouble
+        types update the partition state so the trouble type is not just 'general'.
+        """
+        known = _PANEL_DEVICE_EVENTS.get(event_type)
+        if known is None:
+            log.warning(f"[_process_panel_device_event] Panel (device 0xFF) zone event type {event_type} is not known, please report it")
+            return
+        name, et, updates_state = known
+        log.info(f"[_process_panel_device_event] Panel (device 0xFF) zone event type {event_type} ({name}) -> {et.name}")
+        self.add_panel_event_data(AlPanelEventData(name=0, action=int(et)))
+        if updates_state and self.get_partitions_in_use() is None:
+            self.partition_state[0].update_panel_state(et)
+
     def _handle_msgtype_a5(self, data : bytearray) -> None:  # Status Message
         """MsgType=A5 - Zone Data Update."""
 
@@ -491,7 +517,9 @@ class MessageHandling(MessageHandlingB0Data):
                         self.add_message_to_send_queue(Send.BYPASSTAT)
 
                 if sys_flags & 0x20 != 0:  # Zone Event  # noqa: SIM102
-                    if event_type > 0 and event_device != 0xff: # I think that 0xFF refers to the panel itself as a zone. Currently not processed
+                    if event_type > 0 and event_device == 0xff:   # 0xFF is the panel itself rather than a zone
+                        self._process_panel_device_event(event_type=event_type)
+                    elif event_type > 0:
                         self._process_zone_event(event_device=event_device, event_type=event_type)
 
                 switch_stat1 = data[8]
