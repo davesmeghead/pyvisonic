@@ -36,7 +36,7 @@ from .py_panel_settings import (
 )
 from .py_panel_type_data import DEFAULT_PANEL_TYPE, pmPanelConfig, pmPanelType
 from .py_sensor import AlSensorDevice
-from .py_sensor_types import pmKeyfobNames, pmZoneEventAction
+from .py_sensor_types import pmKeyfobNamesPowerMax, pmZoneEventAction
 from .py_switch import AlSwitchDevice
 from .py_utils import titlecase, to_string
 from .py_visonic_protocol_base import ProtocolBase
@@ -417,10 +417,10 @@ class ManageDevices(ProtocolBase):
                 if isinstance(val1, bytearray):
                     device_id = AlGenericDevice.make_key(IndexName.KEYFOB, i)
                     if device_id not in self.device_list and any(v not in INVALID_VALUES for v in val1[:3]):
-                        # key_fob_type is a bit of a guess but that's what the data on my panel showed 0x16 for all 3 of the keyfobs
-                        key_fob_type = val1[2] & 0x0f
+                        # Byte 2 was 0x16 for every keyfob seen so far, all MCT-234 where checked
+                        key_fob_type = val1[2]
                         device_str = f"{device_str},KF{i+1:0>2}"
-                        model = pmKeyfobNames.get(key_fob_type) if key_fob_type in pmKeyfobNames else None
+                        model = pmKeyfobNamesPowerMax.get(key_fob_type)
                         add_device(IndexName.KEYFOB, i, model=model, device_name="KeyFob")
             # Process keypad settings
             setting = self.eprom_manager.lookup_eprom(EPROM.KEYPAD_1_MAX)

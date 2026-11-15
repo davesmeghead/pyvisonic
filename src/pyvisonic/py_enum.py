@@ -235,6 +235,7 @@ class EventType(IntEnum):
     DISARM = 0x55
 
     FORCE_ARM = 0x59
+    FAIL_TO_ARM = 0x5D                  # Seen on a PowerMax Complete when the exit delay ended while the panel was not ready
     SYSTEM_RESET = 0x60
     INSTALLER_PROGRAMMING = 0x61
 
