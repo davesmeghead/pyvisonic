@@ -46,6 +46,7 @@ class AlGenericDevice(AlDeviceCommon):
         return {
              **(bd or {}),
              "id": self._device_id,
+             "device_uid": self.device_uid,
              "device_type": self._device_type.name,
              "low_battery": self.low_battery,
              "enabled": self.enabled,
@@ -104,6 +105,11 @@ class AlGenericDevice(AlDeviceCommon):
     def id(self) -> int:
         """Getter for the id."""
         return self._device_id
+
+    @property
+    def device_uid(self) -> str:
+        """Return a stable identity unique across device types."""
+        return self.make_key(self._device_type, self._device_id)
 
     @property
     def state(self) -> bool:

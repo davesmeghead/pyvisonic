@@ -23,7 +23,7 @@ import logging
 import os
 import sys
 
-__version__ = "4.1.3"
+__version__ = "4.1.4"
 
 from .client_types import (
     ConnectionStatus,
