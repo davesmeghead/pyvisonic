@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable, Coroutine
 from concurrent.futures import Future
 from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from pyvisonic import VisonicProtocol
@@ -244,14 +244,14 @@ async def test_timeout_reports_terminal_failure_without_sending(
     ("termination", "state"),
     [
         (AlTerminationType.FLOOD_RECOVERY_COMPLETE, ConnectionStatus.RESTART),
-        (AlTerminationType.FLOOD_RECOVERY_FAILED, ConnectionStatus.STOP),
+        (AlTerminationType.FLOOD_RECOVERY_FAILED, ConnectionStatus.RESTART),
     ],
 )
 async def test_manager_obeys_recovery_outcome_with_no_automatic_retry(
     termination: AlTerminationType, state: ConnectionStatus
 ) -> None:
     client = ManageConnection(
-        VisonicClientSettings(connection_type=ConnectionType.ETHERNET, retry_count=0)
+        VisonicClientSettings(connection_type=ConnectionType.ETHERNET)
     )
     try:
         client.on_panel_problem(termination)
@@ -260,15 +260,66 @@ async def test_manager_obeys_recovery_outcome_with_no_automatic_retry(
         await client.async_panel_stop()
 
 
-async def test_terminal_stop_ignores_followup_disconnection() -> None:
-    client = ManageConnection(
-        VisonicClientSettings(connection_type=ConnectionType.ETHERNET, retry_count=3)
-    )
+async def test_failed_flood_recovery_ignores_followup_disconnection() -> None:
+    client = ManageConnection(VisonicClientSettings(connection_type=ConnectionType.ETHERNET))
     try:
         client.on_panel_problem(AlTerminationType.FLOOD_RECOVERY_FAILED)
         client.connection_status_callback(ConnectionStatus.DISCONNECTED)
         client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
-        assert client._requested_state == ConnectionStatus.STOP
+        assert client._requested_state == ConnectionStatus.RESTART
+    finally:
+        await client.async_panel_stop()
+
+
+async def test_failed_flood_recovery_retries_indefinitely() -> None:
+    """Restart after every failed flood recovery without a retry limit."""
+    client = ManageConnection(
+        VisonicClientSettings(
+            connection_type=ConnectionType.ETHERNET,
+            retry_delay=23,
+        )
+    )
+    try:
+        client.on_panel_problem(AlTerminationType.FLOOD_RECOVERY_FAILED)
+        assert client._flood_recovery_failures == 1
+        assert client._requested_state == ConnectionStatus.RESTART
+        assert client.reconnect_attempts == 1
+        assert client.reconnect_attempt_reason == "Panel flood recovery failed"
+
+        client._recovery_stop_latched = False
+        client._attempt_failure_counted = False
+        client.on_panel_problem(AlTerminationType.FLOOD_RECOVERY_FAILED)
+        assert client._flood_recovery_failures == 2
+        assert client._requested_state == ConnectionStatus.RESTART
+        assert client.reconnect_attempts == 2
+    finally:
+        await client.async_panel_stop()
+
+
+async def test_failed_flood_recovery_retries_without_a_retry_limit() -> None:
+    """Retry failed flood recovery without a configured retry limit."""
+    client = ManageConnection(VisonicClientSettings(connection_type=ConnectionType.ETHERNET))
+    try:
+        client.on_panel_problem(AlTerminationType.FLOOD_RECOVERY_FAILED)
+        assert client._flood_recovery_failures == 1
+        assert client._recovery_stop_latched
+        assert client._requested_state == ConnectionStatus.RESTART
+    finally:
+        await client.async_panel_stop()
+
+
+async def test_stable_panel_resets_flood_recovery_failure_count() -> None:
+    """Reset consecutive flood failures after a sustained healthy startup."""
+    client = ManageConnection(
+        VisonicClientSettings(connection_type=ConnectionType.ETHERNET)
+    )
+    try:
+        client._flood_recovery_failures = 1
+        client._system_started = True
+        client._visonic_protocol = MagicMock(recovery_in_progress=False)
+        with patch.object(client, "is_panel_connected", return_value=True):
+            client._reset_flood_recovery_failures_if_stable()
+        assert client._flood_recovery_failures == 0
     finally:
         await client.async_panel_stop()
 
@@ -329,7 +380,7 @@ def test_short_spike_after_long_normal_history_is_not_a_flood() -> None:
     assert not detector.flooding(105)
 
 
-async def test_stale_retry_timer_cannot_override_terminal_stop() -> None:
+async def test_flood_recovery_latch_allows_only_recovery_restart() -> None:
     client = ManageConnection(
         VisonicClientSettings(connection_type=ConnectionType.ETHERNET)
     )
@@ -337,7 +388,7 @@ async def test_stale_retry_timer_cannot_override_terminal_stop() -> None:
         client.on_panel_problem(AlTerminationType.FLOOD_RECOVERY_FAILED)
         client._kick_off_next_step(ConnectionStatus.RETRY_CREATE_TRANSPORT)
         client._kick_off_next_step(ConnectionStatus.INITIAL_CREATE_PROTOCOL)
-        assert client._requested_state == ConnectionStatus.STOP
+        assert client._requested_state == ConnectionStatus.RESTART
     finally:
         await client.async_panel_stop()
 

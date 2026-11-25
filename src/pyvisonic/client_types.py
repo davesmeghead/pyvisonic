@@ -53,7 +53,6 @@ class VisonicClientSettings:
     allow_sensor_bypass: bool = False
     download_code: str = ""
     user_code_slot: int = 0
-    retry_count: int = 1
     retry_delay: float = 90
     offload_f4_ack: bool = False
     panel_id: int = 0

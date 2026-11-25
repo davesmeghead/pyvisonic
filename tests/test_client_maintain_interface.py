@@ -60,6 +60,16 @@ def interface(persist_entry: MagicMock) -> MaintainInterface:
     return client
 
 
+@pytest.fixture
+def inline_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid leaving executor threads behind in mocked socket tests."""
+    monkeypatch.setattr(
+        client_maintain_interface.asyncio,
+        "to_thread",
+        AsyncMock(side_effect=lambda function, *args: function(*args)),
+    )
+
+
 @pytest.mark.parametrize("baud", [9600, 38400])
 async def test_initialise_resets_connection_state(
     interface: MaintainInterface, baud: int
@@ -299,6 +309,15 @@ async def test_panel_event_handlers(interface: MaintainInterface) -> None:
     assert interface.callbacks.state_change.call_count == before
 
 
+def test_state_callback_error_does_not_escape(interface: MaintainInterface) -> None:
+    """Log application callback failures without interrupting protocol handling."""
+    interface.callbacks.state_change.side_effect = RuntimeError("consumer failed")
+    interface._notify_state_changed()
+    interface.logger.exception.assert_called_once_with(
+        "Error in %s callback", "state change"
+    )
+
+
 async def test_achieved_powerlink_when_connected_protocol_missing(
     interface: MaintainInterface,
 ) -> None:
@@ -310,6 +329,7 @@ async def test_achieved_powerlink_when_connected_protocol_missing(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("inline_to_thread")
 @pytest.mark.parametrize(
     ("address", "family", "timeout"),
     [
@@ -379,6 +399,7 @@ async def test_tcp_success(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("inline_to_thread")
 @pytest.mark.parametrize(
     "failure",
     [pytest.param(name, id=name) for name in ("setsockopt", "connect", "recv")],
@@ -401,6 +422,7 @@ async def test_tcp_socket_failure(interface: MaintainInterface, failure: str) ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("inline_to_thread")
 async def test_tcp_socket_allocation_failure(interface: MaintainInterface) -> None:
     """Report failure when no socket could be allocated."""
     callback = Mock()
@@ -421,6 +443,7 @@ async def test_tcp_socket_allocation_failure(interface: MaintainInterface) -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("inline_to_thread")
 @pytest.mark.parametrize(
     "error",
     [
@@ -445,6 +468,7 @@ async def test_tcp_transport_failure(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("inline_to_thread")
 async def test_tcp_callback_failure_closes_protocol(
     interface: MaintainInterface,
 ) -> None:
@@ -499,6 +523,7 @@ async def test_tcp_success_without_status_callback(
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("inline_to_thread")
 async def test_tcp_failure_without_status_callback(
     interface: MaintainInterface,
 ) -> None:

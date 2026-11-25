@@ -430,7 +430,10 @@ class ProtocolBase(AlPanelInterface, MyChecksumCalc):
                 else AlTerminationType.FLOOD_RECOVERY_FAILED
             )
             if state == RecoveryState.FAILED:
-                log.error("RECOVERY failed: traffic did not settle within 180 seconds; integration connection stopped, automatic reconnection disabled")
+                log.error(
+                    "RECOVERY failed: traffic did not settle within 180 seconds; "
+                    "stopping the current connection"
+                )
             else:
                 log.warning("RECOVERY traffic settled after silence; requesting fresh connection state")
             self._shutdown()

@@ -57,6 +57,9 @@ class MaintainInterface:
         self.saved_startup_success_time: datetime | None = None
         self._last_achieved_powerlink = False
         self._system_started = False
+        self._reconnect_attempts = 0
+        self._reconnect_attempt_reason: str | None = None
+        self._attempt_failure_counted = False
         self._last_baud_rate_change_success = True
         self.connection_lock = asyncio.Lock()
         self._sensors: dict[int, AlSensorDevice] = {}
@@ -103,6 +106,16 @@ class MaintainInterface:
     def has_started(self) -> bool:
         """Return whether panel startup completed."""
         return self._system_started
+
+    @property
+    def reconnect_attempts(self) -> int:
+        """Return the number of consecutive failed connection attempts."""
+        return self._reconnect_attempts
+
+    @property
+    def reconnect_attempt_reason(self) -> str | None:
+        """Return the reason for the latest failed connection attempt."""
+        return self._reconnect_attempt_reason
 
     def set_investigation_state(self, state: bool) -> None:
         """Enable or disable protocol investigation."""
@@ -196,6 +209,9 @@ class MaintainInterface:
         """Maintain startup state and forward raw protocol events."""
         if event_id == AlCondition.STARTUP_SUCCESS:
             self._system_started = True
+            self._reconnect_attempts = 0
+            self._reconnect_attempt_reason = None
+            self._attempt_failure_counted = False
             if (
                 self._serial_baud_rate == 9600
                 and self.is_power_master()
@@ -214,8 +230,7 @@ class MaintainInterface:
                     self.update_baud(38400)
                 self.saved_startup_success_time = now
         self.save_working_baud(self._serial_baud_rate)
-        if self.callbacks.panel_change is not None:
-            self.callbacks.panel_change(event_id, data)
+        self._call_callback("panel change", self.callbacks.panel_change, event_id, data)
 
     def save_working_baud(self, baud: int) -> None:
         """Notify the application once when the saved baud changes."""
@@ -226,12 +241,21 @@ class MaintainInterface:
         if baud == self._saved_baud:
             return
         self._saved_baud = baud
-        if self.callbacks.baud_change is not None:
-            self.callbacks.baud_change(baud)
+        self._call_callback("baud change", self.callbacks.baud_change, baud)
 
     def _notify_state_changed(self) -> None:
-        if self.callbacks.state_change is not None:
-            self.callbacks.state_change()
+        self._call_callback("state change", self.callbacks.state_change)
+
+    def _call_callback(
+        self, name: str, callback: Callable[..., Any] | None, *args: Any
+    ) -> None:
+        """Call application callbacks without interrupting the protocol."""
+        if callback is None:
+            return
+        try:
+            callback(*args)
+        except Exception:
+            self.logger.exception("Error in %s callback", name)
 
     def on_panel_change_handler(
         self, event_id: AlCondition, data: dict[str, Any] | None
@@ -253,16 +277,18 @@ class MaintainInterface:
         else:
             self._sensors.pop(id(sensor), None)
             sensor.clear_callbacks()
-        if self.callbacks.sensor_discovery is not None:
-            self.callbacks.sensor_discovery(create, sensor)
+        self._call_callback(
+            "sensor discovery", self.callbacks.sensor_discovery, create, sensor
+        )
         self._notify_state_changed()
 
     def on_sensor_change(
         self, sensor: AlSensorDevice, condition: AlSensorCondition
     ) -> None:
         """Forward sensor changes, including image updates."""
-        if self.callbacks.sensor_change is not None:
-            self.callbacks.sensor_change(sensor, condition)
+        self._call_callback(
+            "sensor change", self.callbacks.sensor_change, sensor, condition
+        )
         self._notify_state_changed()
 
     def on_new_switch(self, create: bool, switch: AlSwitchDevice) -> None:
@@ -274,14 +300,14 @@ class MaintainInterface:
         else:
             self._switches.pop(id(switch), None)
             switch.clear_callbacks()
-        if self.callbacks.switch_discovery is not None:
-            self.callbacks.switch_discovery(create, switch)
+        self._call_callback(
+            "switch discovery", self.callbacks.switch_discovery, create, switch
+        )
         self._notify_state_changed()
 
     def on_switch_change(self, switch: AlSwitchDevice) -> None:
         """Forward switch state changes."""
-        if self.callbacks.switch_change is not None:
-            self.callbacks.switch_change(switch)
+        self._call_callback("switch change", self.callbacks.switch_change, switch)
         self._notify_state_changed()
 
     def on_new_device(self, create: bool, device: AlGenericDevice) -> None:
@@ -293,14 +319,14 @@ class MaintainInterface:
         else:
             self._devices.pop(id(device), None)
             device.clear_callbacks()
-        if self.callbacks.device_discovery is not None:
-            self.callbacks.device_discovery(create, device)
+        self._call_callback(
+            "device discovery", self.callbacks.device_discovery, create, device
+        )
         self._notify_state_changed()
 
     def on_device_change(self, device: AlGenericDevice) -> None:
         """Forward generic device state changes."""
-        if self.callbacks.device_change is not None:
-            self.callbacks.device_change(device)
+        self._call_callback("device change", self.callbacks.device_change, device)
         self._notify_state_changed()
 
     def on_panel_event_log_handler(
@@ -313,10 +339,16 @@ class MaintainInterface:
         event: int,
     ) -> None:
         """Forward event log entries without translating device or event codes."""
-        if self.callbacks.event_log is not None:
-            self.callbacks.event_log(
-                total, current, partition, dateandtime, zone, event
-            )
+        self._call_callback(
+            "event log",
+            self.callbacks.event_log,
+            total,
+            current,
+            partition,
+            dateandtime,
+            zone,
+            event,
+        )
 
     async def async_create_tcp_client(
         self,

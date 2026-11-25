@@ -1,24 +1,23 @@
 """Test direct panel connection lifecycle and callbacks without real transports."""
 
 import asyncio
-import logging
 from collections.abc import AsyncGenerator, Callable
+import logging
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
-from pyvisonic import AlCommandStatus, AlTerminationType, PyVisonicException
-from pyvisonic.client_maintain_interface import (
-    ConnectionStatus,
-)
-from pyvisonic.client_manage_connection import (
-    ManageConnection,
-)
-from pyvisonic.client_types import (
-    ConnectionType,
-    VisonicClientSettings,
-)
+from pyvisonic.client_maintain_interface import ConnectionStatus
+from pyvisonic.client_manage_connection import ManageConnection
+from pyvisonic.client_types import ConnectionType, VisonicClientSettings
 from requests import ConnectTimeout, HTTPError
 from serialx import BaseSerialTransport, SerialException
+
+from pyvisonic import (
+    AlCommandStatus,
+    AlCondition,
+    AlTerminationType,
+    PyVisonicException,
+)
 
 MODULE = "pyvisonic.client_manage_connection"
 
@@ -74,7 +73,6 @@ async def machine(
         patch.object(asyncio.get_running_loop(), "call_later") as timer,
         patch(f"{MODULE}.asyncio.sleep", new_callable=AsyncMock),
     ):
-        client.settings.retry_count = 3
         yield client, create, timer
 
 
@@ -99,24 +97,30 @@ async def test_connection_manager_initializes_and_connects(
     timer.assert_called_once()
 
 
-async def test_connection_manager_retries_until_limit(
+async def test_connection_manager_retries_indefinitely(
     machine: tuple[ManageConnection, MagicMock, MagicMock],
 ) -> None:
-    """Stop after the configured number of failed connection attempts."""
+    """Continue retrying after repeated failed transport attempts."""
     client, _, timer = machine
+    client._async_create_transport.return_value = False
     await run_states(
         client,
         [
             ConnectionStatus.INITIAL_CREATE_PROTOCOL,
             ConnectionStatus.INITIAL_CREATE_TRANSPORT,
+            ConnectionStatus.NO_CONNECTION_MADE,
             ConnectionStatus.RETRY_CREATE_TRANSPORT,
+            ConnectionStatus.NO_CONNECTION_MADE,
             ConnectionStatus.RETRY_CREATE_TRANSPORT,
+            ConnectionStatus.NO_CONNECTION_MADE,
+            ConnectionStatus.RETRY_CREATE_TRANSPORT,
+            ConnectionStatus.NO_CONNECTION_MADE,
             ConnectionStatus.RETRY_CREATE_TRANSPORT,
             ConnectionStatus.STOP,
         ],
     )
-    assert client._async_create_transport.await_count == 2
-    assert timer.call_count == 2
+    assert client._async_create_transport.await_count == 5
+    assert timer.call_count == 5
     client._async_stop.assert_awaited_once()
 
 
@@ -143,22 +147,23 @@ async def test_connection_manager_disconnection_restarts_transport(
     assert timer.call_count == 2
 
 
-async def test_connection_manager_retry_limit_one(
+async def test_connection_manager_retries_indefinitely_after_failures(
     machine: tuple[ManageConnection, MagicMock, MagicMock],
 ) -> None:
-    """Stop immediately when the initial attempt exhausts the retry limit."""
+    """Keep retrying after multiple transport failures."""
     client, _, _ = machine
-    client.settings.retry_count = 1
     await run_states(
         client,
         [
             ConnectionStatus.INITIAL_CREATE_PROTOCOL,
             ConnectionStatus.INITIAL_CREATE_TRANSPORT,
             ConnectionStatus.RETRY_CREATE_TRANSPORT,
+            ConnectionStatus.NO_CONNECTION_MADE,
+            ConnectionStatus.RETRY_CREATE_TRANSPORT,
             ConnectionStatus.STOP,
         ],
     )
-    assert client._async_create_transport.await_count == 1
+    assert client._async_create_transport.await_count == 3
 
 
 async def test_connection_manager_retry_transport_failure(
@@ -166,7 +171,6 @@ async def test_connection_manager_retry_transport_failure(
 ) -> None:
     """Restart protocol setup when a later transport attempt raises an error."""
     client, create, _ = machine
-    client.settings.retry_count = 3
     client._async_create_transport.side_effect = [True, False]
     await run_states(
         client,
@@ -407,7 +411,7 @@ async def test_connect_and_baud_update_queue_states(client: ManageConnection) ->
 async def test_state_machine_exception_and_close_paths(
     machine: tuple[ManageConnection, MagicMock, MagicMock],
 ) -> None:
-    """Handle restart, exception, and close requests by stopping cleanly."""
+    """Handle restart, exception, and close requests with clean reconnections."""
     client, create, _ = machine
     await run_states(
         client,
@@ -423,26 +427,23 @@ async def test_state_machine_exception_and_close_paths(
             ConnectionStatus.STOP,
         ],
     )
-    assert create.call_count == 2
+    assert create.call_count == 3
     client._async_stop.assert_awaited()
 
 
 async def test_panel_problem_selects_reconnect_state(client: ManageConnection) -> None:
-    """Retry a baud after panel silence and respect a zero-retry configuration."""
+    """Retry after panel silence regardless of the legacy retry setting."""
     client.settings.connection_type = ConnectionType.SERIAL
-    client.settings.retry_count = 3
     client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
     assert client._requested_state == ConnectionStatus.BAUD_CHANGE_RESET_PROTOCOL
     assert client._serial_baud_rate == 9600
     client.on_panel_problem(AlTerminationType.CRC_ERROR)
     assert client._requested_state == ConnectionStatus.RESTART
-    client.settings.retry_count = 0
     client.on_panel_problem(AlTerminationType.EXTERNAL_TERMINATION)
-    assert client._requested_state == ConnectionStatus.STOP
+    assert client._requested_state == ConnectionStatus.RESTART
 
 
 @pytest.mark.parametrize("connection_type", list(ConnectionType))
-@pytest.mark.parametrize("retry_count", [0, 3])
 @pytest.mark.parametrize(
     ("first", "second"),
     [
@@ -457,16 +458,17 @@ async def test_panel_problem_selects_reconnect_state(client: ManageConnection) -
 async def test_disconnection_counted_once_until_reconnected(
     client: ManageConnection,
     connection_type: ConnectionType,
-    retry_count: int,
     first: Callable[[ManageConnection], None],
     second: Callable[[ManageConnection], None],
 ) -> None:
-    """Overlapping failures count once, retries preserve the guard, recovery resets it."""
+    """Count an established connection closure once until startup succeeds again."""
     client.settings.connection_type = connection_type
-    client.settings.retry_count = retry_count
     client.connection_status_callback(ConnectionStatus.CONNECTED, MagicMock())
+    client.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
+    client.on_panel_problem(AlTerminationType.NO_POWERLINK_FOR_PERIOD)
+    assert client.panel_disconnection_counter == 0
+    client.connection_status_callback(ConnectionStatus.DISCONNECTED)
     first(client)
-    second(client)
     second(client)
     assert client.panel_disconnection_counter == 1
 
@@ -476,18 +478,46 @@ async def test_disconnection_counted_once_until_reconnected(
     assert client.panel_disconnection_counter == 1
 
     client.connection_status_callback(ConnectionStatus.CONNECTED, MagicMock())
+    first(client)
+    second(client)
+    assert client.panel_disconnection_counter == 1
+
+    client.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
     first(client)
     second(client)
     assert client.panel_disconnection_counter == 2
 
 
+async def test_powerlink_timeout_does_not_increment_disconnection_count(
+    client: ManageConnection,
+) -> None:
+    """A protocol timeout alone is not a closed connection."""
+    client.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
+    client.on_panel_problem(AlTerminationType.NO_POWERLINK_FOR_PERIOD)
+
+    assert client.panel_disconnection_counter == 0
+
+    client.connection_status_callback(ConnectionStatus.CONNECTED, MagicMock())
+    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
+
+    assert client.panel_disconnection_counter == 0
+
+    transport_connection = MagicMock()
+    transport_connection.transport.is_closing.return_value = False
+    client._client_vis_protocol = transport_connection
+    await client._async_stop_transport()
+
+    assert client.panel_disconnection_counter == 1
+
+
 async def test_failed_startup_does_not_count_as_disconnection(
     client: ManageConnection,
 ) -> None:
-    """Initial connection failures do not increment the outage counter."""
+    """A connection that never reached panel startup stays at zero."""
     client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
     client.connection_status_callback(ConnectionStatus.NO_CONNECTION_MADE)
     client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_NEVER_CONNECTED)
+    client.connection_status_callback(ConnectionStatus.DISCONNECTED)
     assert client.panel_disconnection_counter == 0
 
 
@@ -525,13 +555,89 @@ async def test_failed_startup_does_not_count_as_disconnection(
 async def test_connection_manager_catches_operation_errors(
     machine: tuple[ManageConnection, MagicMock, MagicMock], error: Exception
 ) -> None:
-    """Keep transport and library exceptions within the connection manager."""
+    """Queue recovery when protocol creation raises an operation error."""
     client, create, _ = machine
     create.side_effect = error
+    with patch.object(
+        client, "_kick_off_next_step", wraps=client._kick_off_next_step
+    ) as request:
+        await run_states(
+            client,
+            [ConnectionStatus.INITIAL_CREATE_PROTOCOL, ConnectionStatus.STOP],
+        )
+    assert call(ConnectionStatus.RESTART) in request.call_args_list
+
+
+async def test_connect_can_restart_manager_from_stop(
+    machine: tuple[ManageConnection, MagicMock, MagicMock],
+) -> None:
+    """Accept a new connection request after the manager entered STOP."""
+    client, create, _ = machine
     await run_states(
         client,
-        [ConnectionStatus.INITIAL_CREATE_PROTOCOL, ConnectionStatus.STOP],
+        [
+            ConnectionStatus.INITIAL_CREATE_PROTOCOL,
+            ConnectionStatus.STOP,
+            ConnectionStatus.INITIAL_CREATE_PROTOCOL,
+            ConnectionStatus.STOP,
+        ],
     )
+    assert create.call_count == 2
+
+
+async def test_reconnect_counter_reason_resets_after_panel_communication(
+    client: ManageConnection,
+) -> None:
+    """Record one reason per failed attempt and reset after panel startup."""
+    problem = AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED
+    client.on_panel_problem(problem)
+    client.on_panel_problem(problem)
+    assert client.reconnect_attempts == 1
+    assert client.reconnect_attempt_reason == "Panel stopped responding"
+
+    client.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
+    assert client.reconnect_attempts == 0
+    assert client.reconnect_attempt_reason is None
+
+
+async def test_reconnecting_one_panel_does_not_change_another() -> None:
+    """Keep connection retries and diagnostics isolated to each panel client."""
+    first = ManageConnection(
+        VisonicClientSettings(connection_type=ConnectionType.ETHERNET, panel_id=1)
+    )
+    second = ManageConnection(
+        VisonicClientSettings(connection_type=ConnectionType.ETHERNET, panel_id=2)
+    )
+    try:
+        first.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
+
+        assert first._requested_state == ConnectionStatus.RESTART
+        assert first.reconnect_attempts == 1
+        assert first.reconnect_attempt_reason == "Panel stopped responding"
+        assert second._requested_state == ConnectionStatus.READY_TO_START
+        assert second.reconnect_attempts == 0
+        assert second.reconnect_attempt_reason is None
+    finally:
+        await first.async_panel_stop()
+        await second.async_panel_stop()
+
+
+async def test_stop_protocol_after_transport_close_error(
+    client: ManageConnection,
+) -> None:
+    """Continue protocol shutdown if closing the transport raises."""
+    client._client_vis_protocol = MagicMock()
+    protocol = client._visonic_protocol = MagicMock()
+    with patch(
+        f"{MODULE}.async_close_transport",
+        new=AsyncMock(side_effect=RuntimeError("transport close failed")),
+    ):
+        await client._async_stop()
+
+    assert client._client_vis_protocol is None
+    assert client._visonic_protocol is None
+    protocol.shutdown.assert_called_once_with()
+    client.logger.exception.assert_called_once_with("Failed to close Visonic transport")
 
 
 async def test_connection_manager_pending_and_failed_initial_connection(

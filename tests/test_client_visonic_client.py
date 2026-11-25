@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, call
 import pytest
 from pyvisonic import (
     AlCommandStatus,
+    AlCondition,
     AlPanelCommand,
     AlPanelStatus,
     AlSwitchCommand,
     AlTerminationType,
+    ConnectionStatus,
     ConnectionType,
     VisonicClient,
     VisonicClientSettings,
@@ -167,12 +169,13 @@ def test_client_panel_status(client: VisonicClient, extended: bool) -> None:
 
 
 def test_disconnection_count_property(client: VisonicClient) -> None:
-    """Expose a read-only count without requiring a live protocol."""
+    """Expose a read-only count after an established connection closes."""
     client._visonic_protocol = None
     assert client.disconnection_count == 0
-    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
+    client.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
+    client.connection_status_callback(ConnectionStatus.DISCONNECTED)
     assert client.disconnection_count == 1
-    client.on_panel_problem(AlTerminationType.NO_DATA_FROM_PANEL_DISCONNECTED)
+    client.connection_status_callback(ConnectionStatus.DISCONNECTED)
     assert client.disconnection_count == 1
     with pytest.raises(AttributeError):
         setattr(client, "disconnection_count", 5)

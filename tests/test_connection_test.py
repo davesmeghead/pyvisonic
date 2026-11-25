@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pyvisonic import (
+    AlCondition,
     AlTerminationType,
     ConnectionStatus,
     ConnectionType,
@@ -74,7 +75,10 @@ def serial_panel() -> Generator[tuple[MagicMock, AsyncMock]]:
         def write(data: bytes | bytearray) -> None:
             if data == STATUS_REQUEST:
                 transport.requests.append(transport.baudrate)
-                transport.request_events[len(transport.requests) - 1].set()
+                request_index = len(transport.requests) - 1
+                if request_index == len(transport.request_events):
+                    transport.request_events.append(asyncio.Event())
+                transport.request_events[request_index].set()
                 reply = (
                     transport.reply
                     if transport.baudrate == transport.working_baud
@@ -462,13 +466,16 @@ async def test_serial_recovery_discovers_current_baud(
 
     saved_baud = MagicMock()
     client = VisonicClient(
-        VisonicClientSettings(connection_type=ConnectionType.SERIAL, baud=38400),
+        VisonicClientSettings(
+            connection_type=ConnectionType.SERIAL, baud=38400, retry_delay=0.01
+        ),
         VisonicClientCallbacks(connection_change=progress, baud_change=saved_baud),
     )
     with patch("pyvisonic.py_visonic.VisonicProtocol._start_sequencer") as start:
         try:
             client.connect()
             await asyncio.wait_for(connected.wait(), timeout=1)
+            client.panel_change_event(AlCondition.STARTUP_SUCCESS, None)
             old_panel = client._protocol
             assert client.panel_disconnection_counter == 0
             connected.clear()
@@ -516,24 +523,23 @@ async def test_cancel_serial_startup_probe(
 
 
 @pytest.mark.usefixtures("quick_discovery")
-async def test_serial_startup_probe_failure_respects_retry_policy(
+async def test_serial_startup_probe_failure_retries_when_legacy_count_is_zero(
     serial_panel: tuple[MagicMock, AsyncMock],
 ) -> None:
-    """Exhausted discovery leaves the saved baud intact and honors disabled retries."""
+    """Keep retrying failed discovery even when the legacy retry count is zero."""
     transport, factory = serial_panel
     transport.reply = b""
-    stopped = asyncio.Event()
+    retried = asyncio.Event()
 
     def progress(state: ConnectionStatus, attempt: int) -> None:
-        if state == ConnectionStatus.STOP:
-            stopped.set()
+        if state == ConnectionStatus.RETRY_CREATE_TRANSPORT and attempt >= 2:
+            retried.set()
 
     saved = MagicMock()
     client = VisonicClient(
         VisonicClientSettings(
             connection_type=ConnectionType.SERIAL,
             baud=38400,
-            retry_count=0,
             retry_delay=0.01,
         ),
         VisonicClientCallbacks(connection_change=progress, baud_change=saved),
@@ -541,15 +547,15 @@ async def test_serial_startup_probe_failure_respects_retry_policy(
     with patch("pyvisonic.py_visonic.VisonicProtocol._start_sequencer") as start:
         try:
             client.connect()
-            await asyncio.wait_for(stopped.wait(), timeout=1)
-            assert transport.requests == [38400, 9600, 38400, 9600]
+            await asyncio.wait_for(retried.wait(), timeout=1)
+            assert len(transport.requests) > 4
             assert client.settings.baud == 38400
             saved.assert_not_called()
             start.assert_not_called()
-            factory.assert_awaited_once()
+            assert factory.await_count >= 2
         finally:
             await client.async_panel_stop()
-    transport.close.assert_called_once()
+    assert transport.close.call_count >= 2
     assert not VisonicProtocolClient.connections()
 
 
@@ -557,7 +563,7 @@ async def test_serial_startup_probe_failure_respects_retry_policy(
 async def test_serial_startup_retries_failed_discovery(
     serial_panel: tuple[MagicMock, AsyncMock],
 ) -> None:
-    """A failed discovery schedules another connection attempt when retries allow it."""
+    """A failed discovery schedules another connection attempt."""
     transport, factory = serial_panel
     transport.reply = b""
     connected = asyncio.Event()
@@ -570,7 +576,7 @@ async def test_serial_startup_retries_failed_discovery(
 
     client = VisonicClient(
         VisonicClientSettings(
-            connection_type=ConnectionType.SERIAL, retry_count=2, retry_delay=0.01
+            connection_type=ConnectionType.SERIAL, retry_delay=0.01
         ),
         VisonicClientCallbacks(connection_change=progress),
     )
